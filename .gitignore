@@ -53,3 +53,8 @@ dkms.conf
 
 # debug information files
 *.dwo
+.pio/
+.venv/
+firmware/
+__pycache__/
+.DS_Store
