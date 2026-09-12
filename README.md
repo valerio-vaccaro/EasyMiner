@@ -21,14 +21,22 @@
 
 ## 🧩 Supported CI build targets
 
+The project supports two PlatformIO board definitions and four headless hardware profiles. Each profile also has a BLOXMiner variant, for eight CI build targets total.
+
 | Environment | Board profile | Use case |
 | --- | --- | --- |
 | `esp32-headless` | `esp32dev` | Classic ESP32, serial/headless |
 | `esp32s3-headless` | `esp32-s3-devkitc-1` | ESP32-S3 DevKit, serial/headless |
 | `esp32-headless-led` | `esp32dev` | Classic ESP32 with external RGB status LED |
 | `esp32s3-mini-headless` | `esp32-s3-devkitc-1` | ESP32-S3 Mini profile |
+| `esp32-headless-blox` | `esp32dev` | BLOXMiner on classic ESP32, serial/headless |
+| `esp32s3-headless-blox` | `esp32-s3-devkitc-1` | BLOXMiner on ESP32-S3 DevKit, serial/headless |
+| `esp32-headless-led-blox` | `esp32dev` | BLOXMiner on classic ESP32 with external RGB status LED |
+| `esp32s3-mini-headless-blox` | `esp32-s3-devkitc-1` | BLOXMiner on ESP32-S3 Mini profile |
 
-The board profiles and pin definitions live in [`include/board_config.h`](include/board_config.h). Display-oriented profiles are documented there for ongoing hardware support, but the current firmware source is headless and does not compile a display task.
+The active board profiles and pin definitions live in [`include/board_config.h`](include/board_config.h). Only the profiles listed above are currently exposed by `platformio.ini`.
+
+> **BLOX attribution:** The BLOX logo and brand are registered to [BLOX.space](https://blox.space/), the innovative Bitcoin Hub in Turin.
 
 ## 🚀 Quick start
 
@@ -47,7 +55,7 @@ pio run -e esp32-headless -t upload
 pio run -e esp32s3-headless -t upload
 ```
 
-On first boot, connect to the `EasyMiner_XXXX` access point. Use the captive portal to set Wi-Fi, wallet, worker, and pool settings. Once connected, open the device IP in a browser. The dashboard uses HTTP port `80` and WebSocket port `81`.
+On first boot, connect to the `EasyMiner_XXXX` access point. Use the captive portal to set Wi-Fi, wallet, worker, and pool settings. Once connected, open `http://easyminer.local/` from a device on the same network. If mDNS is unavailable, use the device IP shown in the serial log or router DHCP list. The dashboard uses HTTP port `80` and WebSocket port `81`.
 
 ## 📥 Firmware files
 
