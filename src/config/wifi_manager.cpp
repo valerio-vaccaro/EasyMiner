@@ -4,6 +4,7 @@
  */
 
 #include <Arduino.h>
+#include <ESPmDNS.h>
 #include <WiFiManager.h>
 #include <board_config.h>
 #include "wifi_manager.h"
@@ -15,6 +16,15 @@ static WiFiManager s_wm;
 static bool s_initialized = false;
 static bool s_portalRunning = false;
 static char s_ipAddress[16] = "0.0.0.0";
+
+static void startMdns() {
+    if (MDNS.begin("easyminer")) {
+        MDNS.addService("http", "tcp", 80);
+        Serial.println("[WIFI] mDNS: http://easyminer.local/");
+    } else {
+        Serial.println("[WIFI] mDNS start failed");
+    }
+}
 
 // Custom parameters
 static WiFiManagerParameter* s_paramWallet = NULL;
@@ -197,6 +207,8 @@ void wifi_manager_init() {
     s_paramBackupWallet = new WiFiManagerParameter("bk_wallet", "Backup Wallet (optional)", config->backupWallet, MAX_WALLET_LEN);
     s_paramBackupPoolPassword = new WiFiManagerParameter("bk_pool_pass", "Backup Password", config->backupPoolPassword, MAX_PASSWORD_LEN);
 
+    // Headless boards do not expose display controls in the Wi-Fi portal.
+#if 0
     // Brightness dropdown
     const int brightValues[] = {10, 25, 50, 75, 100};
     strcpy(s_brightnessHtml, "<br><select name='bright'>");
@@ -287,6 +299,7 @@ void wifi_manager_init() {
     strcat(s_invertHtml, ">Light</option></select>");
     // Use config value as default for hidden input
     s_paramInvert = new WiFiManagerParameter("invert", "Color Theme", config->invertColors ? "1" : "0", 2, s_invertHtml);
+#endif
 
     // Stats API Settings
     const char* statsHeader = "<br><h3>Stats API Settings</h3><div style='font-size:80%;color:#aaa'>Priority: Custom API &gt; Proxy &gt; Direct HTTPS</div>";
@@ -403,12 +416,6 @@ void wifi_manager_init() {
     s_wm.addParameter(s_paramBackupWallet);
     s_wm.addParameter(s_paramBackupPoolPassword);
 
-    s_wm.addParameter(s_paramBrightness);
-    s_wm.addParameter(s_paramScreenTimeout);
-    s_wm.addParameter(s_paramRotation);
-    s_wm.addParameter(s_paramTimezone);
-    s_wm.addParameter(s_paramInvert);
-
     s_wm.addParameter(s_paramStatsHeader);
     s_wm.addParameter(s_paramStatsEnabled);
     s_wm.addParameter(s_paramStatsApiUrl);
@@ -449,6 +456,8 @@ void wifi_manager_blocking() {
         Serial.println("[WIFI] Connected!");
         Serial.printf("[WIFI] IP: %s\n", WiFi.localIP().toString().c_str());
         strncpy(s_ipAddress, WiFi.localIP().toString().c_str(), sizeof(s_ipAddress));
+
+        startMdns();
 
         WiFi.setSleep(false);  // Disable power save (prevents WPA rekey issues)
 
@@ -519,6 +528,8 @@ void wifi_manager_start() {
         if (WiFi.status() == WL_CONNECTED) {
             Serial.printf("[WIFI] Connected! IP: %s\n", WiFi.localIP().toString().c_str());
             strncpy(s_ipAddress, WiFi.localIP().toString().c_str(), sizeof(s_ipAddress));
+
+            startMdns();
 
             WiFi.setSleep(false);  // Disable power save (prevents WPA rekey issues)
             

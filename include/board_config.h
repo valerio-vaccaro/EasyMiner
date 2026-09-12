@@ -11,7 +11,11 @@
 // ============================================================
 // Project Info
 // ============================================================
-#define MINER_NAME "EasyMiner"
+#ifdef BLOX_VARIANT
+    #define MINER_NAME "BLOXMiner"
+#else
+    #define MINER_NAME "EasyMiner"
+#endif
 #define MINER_VERSION "1.0.0"
 
 #ifndef AUTO_VERSION
@@ -32,163 +36,11 @@
     #define dbg(...) (void)0
 #endif
 
-// ============================================================
-// ESP32-2432S028R - Cheap Yellow Display 2.8"
-// ============================================================
-#if defined(ESP32_2432S028)
-    #define BOARD_NAME "ESP32-2432S028"
-
-    // Display
-    #ifndef USE_DISPLAY
-        #define USE_DISPLAY 1
-    #endif
-    #define DISPLAY_TYPE_TFT 1
-    // Undefine TFT dimensions if set by library, then set our values
-    #ifdef TFT_WIDTH
-        #undef TFT_WIDTH
-    #endif
-    #define TFT_WIDTH 320
-    #ifdef TFT_HEIGHT
-        #undef TFT_HEIGHT
-    #endif
-    #define TFT_HEIGHT 240
-
-    // LED (RGB, active low)
-    #ifndef LED_R_PIN
-        #define LED_R_PIN 4
-    #endif
-    #ifndef LED_G_PIN
-        #define LED_G_PIN 16
-    #endif
-    #ifndef LED_B_PIN
-        #define LED_B_PIN 17
-    #endif
-    #define LED_PWM_FREQ 5000
-    #define LED_PWM_RES 12
-
-    // Backlight
-    #ifndef TFT_BL_PIN
-        #define TFT_BL_PIN 21
-    #endif
-
-    // Button
-    #ifndef BUTTON_PIN
-        #define BUTTON_PIN 0
-    #endif
-    #define BUTTON_ACTIVE_LOW 1
-
-    // SHA Implementation: Defined in platformio.ini (USE_HARDWARE_SHA=1)
-
-// ============================================================
-// ESP32-S3-CYD - Cheap Yellow Display (S3 Single USB)
-// ============================================================
-#elif defined(ESP32_S3_CYD)
-    #define BOARD_NAME "ESP32-S3-CYD"
-
-    // Display
-    #ifndef USE_DISPLAY
-        #define USE_DISPLAY 1
-    #endif
-    #define DISPLAY_TYPE_TFT 1
-    // Undefine TFT dimensions if set by library, then set our values
-    #ifdef TFT_WIDTH
-        #undef TFT_WIDTH
-    #endif
-    #define TFT_WIDTH 320
-    #ifdef TFT_HEIGHT
-        #undef TFT_HEIGHT
-    #endif
-    #define TFT_HEIGHT 240
-
-    // LED
-    #ifndef LED_PIN
-        #define LED_PIN 4
-    #endif
-
-    // Backlight (Waveshare ESP32-S3-Touch-LCD-2.8)
-    #ifndef TFT_BL_PIN
-        #define TFT_BL_PIN 45
-    #endif
-
-    // Button
-    #ifndef BUTTON_PIN
-        #define BUTTON_PIN 0
-    #endif
-    #define BUTTON_ACTIVE_LOW 1
-
-    // SHA Implementation: Defined in platformio.ini (USE_HARDWARE_SHA=1)
-
-// ============================================================
-// LILYGO T-Display S3 - 170x320 ST7789 (8-bit parallel)
-// ============================================================
-#elif defined(LILYGO_T_DISPLAY_S3)
-    #define BOARD_NAME "T-Display-S3"
-
-    #ifndef USE_DISPLAY
-        #define USE_DISPLAY 1
-    #endif
-    #define DISPLAY_TYPE_TFT 1
-
-    #ifdef TFT_WIDTH
-        #undef TFT_WIDTH
-    #endif
-    #define TFT_WIDTH 170
-
-    #ifdef TFT_HEIGHT
-        #undef TFT_HEIGHT
-    #endif
-    #define TFT_HEIGHT 320
-
-    // Buttons
-    #ifndef BUTTON_PIN
-        #define BUTTON_PIN 0
-    #endif
-    #ifndef BUTTON2_PIN
-        #define BUTTON2_PIN 14
-    #endif
-    #define BUTTON_ACTIVE_LOW 1
-
-    // 5V enable pin (T-Display S3 specific)
-    #define PIN_ENABLE5V 15
-
-    // SHA Implementation: Defined in platformio.ini (USE_HARDWARE_SHA=1)
-
-// ============================================================
-// LILYGO T-Display V1 - 135x240 ST7789 (SPI)
-// ============================================================
-#elif defined(LILYGO_T_DISPLAY_V1)
-    #define BOARD_NAME "T-Display-V1"
-
-    #ifndef USE_DISPLAY
-        #define USE_DISPLAY 1
-    #endif
-    #define DISPLAY_TYPE_TFT 1
-
-    #ifdef TFT_WIDTH
-        #undef TFT_WIDTH
-    #endif
-    #define TFT_WIDTH 135
-
-    #ifdef TFT_HEIGHT
-        #undef TFT_HEIGHT
-    #endif
-    #define TFT_HEIGHT 240
-
-    // Buttons
-    #ifndef BUTTON_PIN
-        #define BUTTON_PIN 0
-    #endif
-    #ifndef BUTTON2_PIN
-        #define BUTTON2_PIN 35
-    #endif
-    #define BUTTON_ACTIVE_LOW 1
-
-    // SHA Implementation: Defined in platformio.ini (USE_HARDWARE_SHA=1)
 
 // ============================================================
 // ESP32-S3 DevKit - Hardware SHA (headless)
 // ============================================================
-#elif defined(ESP32_S3_DEVKIT)
+#if defined(ESP32_S3_DEVKIT)
     #define BOARD_NAME "ESP32-S3-DevKit"
 
     #ifndef USE_DISPLAY
@@ -280,120 +132,6 @@
 
     // SHA Implementation: Defined in platformio.ini (USE_HARDWARE_SHA=1)
 
-// ============================================================
-// ESP32-C3 SuperMini - Single-core RISC-V (headless)
-// Ultra-compact and cheap ESP32-C3 board
-// ============================================================
-#elif defined(ESP32_C3_SUPERMINI)
-    #define BOARD_NAME "ESP32-C3-SuperMini"
-
-    #define USE_DISPLAY 0
-
-    // No LED status by default (can be added)
-    #ifndef USE_LED_STATUS
-        #define USE_LED_STATUS 0
-    #endif
-
-    #ifndef BUTTON_PIN
-        #define BUTTON_PIN 9  // XIAO ESP32-C3 boot button
-    #endif
-    #define BUTTON_ACTIVE_LOW 1
-
-    // Single-core RISC-V - software SHA only
-    // SHA Implementation: Uses miner_sha256.cpp (BitsyMiner software SHA)
-
-// ============================================================
-// ESP32-C3 with OLED Display (0.96" 128x64 SSD1306)
-// Compact miner with small monochrome display
-// ============================================================
-#elif defined(ESP32_C3_OLED)
-    #define BOARD_NAME "ESP32-C3-OLED"
-
-    // Use OLED display (not TFT)
-    #define USE_DISPLAY 0
-    #define USE_OLED_DISPLAY 1
-
-    // OLED configuration (128x64 SSD1306 I2C)
-    #define OLED_WIDTH 128
-    #define OLED_HEIGHT 64
-    #define OLED_SDA_PIN 5
-    #define OLED_SCL_PIN 6
-    #define OLED_I2C_ADDR 0x3C
-
-    #ifndef BUTTON_PIN
-        #define BUTTON_PIN 9
-    #endif
-    #define BUTTON_ACTIVE_LOW 1
-
-    // Single-core RISC-V - software SHA only
-    // SHA Implementation: Uses miner_sha256.cpp (BitsyMiner software SHA)
-
-// ============================================================
-// ESP32-S3 with OLED Display (0.96" 128x64 SSD1306)
-// Higher performance with small display
-// ============================================================
-#elif defined(ESP32_S3_OLED)
-    #define BOARD_NAME "ESP32-S3-OLED"
-
-    // Use OLED display (not TFT)
-    #define USE_DISPLAY 0
-    #define USE_OLED_DISPLAY 1
-
-    // OLED configuration (128x64 SSD1306 I2C)
-    #define OLED_WIDTH 128
-    #define OLED_HEIGHT 64
-    #define OLED_SDA_PIN 5
-    #define OLED_SCL_PIN 6
-    #define OLED_I2C_ADDR 0x3C
-
-    #ifndef BUTTON_PIN
-        #define BUTTON_PIN 0
-    #endif
-    #define BUTTON_ACTIVE_LOW 1
-
-    // SHA Implementation: Defined in platformio.ini (USE_HARDWARE_SHA=1)
-
-// ============================================================
-// Wemos Lolin32 + OLED Display
-// Verified wiring:
-//   SDA=GPIO5, SCL=GPIO4, RST=GPIO16, ADDR=0x3C
-// ============================================================
-#elif defined(WEMOS_LOLIN32_OLED)
-    #define BOARD_NAME "Wemos-Lolin32-OLED"
-
-    #define USE_DISPLAY 0
-    #define USE_OLED_DISPLAY 1
-
-    #ifndef OLED_WIDTH
-        #define OLED_WIDTH 128
-    #endif
-    #ifndef OLED_HEIGHT
-        #define OLED_HEIGHT 64
-    #endif
-    #ifndef OLED_SDA_PIN
-        #define OLED_SDA_PIN 5
-    #endif
-    #ifndef OLED_SCL_PIN
-        #define OLED_SCL_PIN 4
-    #endif
-    #ifndef OLED_I2C_ADDR
-        #define OLED_I2C_ADDR 0x3C
-    #endif
-    #ifndef OLED_I2C_RST
-        #define OLED_I2C_RST 16
-    #endif
-
-    #define USE_LED_STATUS 1
-    #define GPIO_LED_PIN 2
-    #define GPIO_LED_ACTIVE_LOW 0
-
-    #ifndef BUTTON_PIN
-        #define BUTTON_PIN 0
-    #endif
-    #define BUTTON_ACTIVE_LOW 1
-
-    // SHA Implementation: classic ESP32 hardware SHA peripheral
-    // Defined in platformio.ini via -D USE_HARDWARE_SHA=1
 
 // ============================================================
 // Default - Generic ESP32
@@ -457,7 +195,11 @@
 // ============================================================
 // Network Configuration
 // ============================================================
-#define AP_SSID_PREFIX      "EasyMiner_"
+#ifdef BLOX_VARIANT
+    #define AP_SSID_PREFIX  "BLOXMiner_"
+#else
+    #define AP_SSID_PREFIX  "EasyMiner_"
+#endif
 #define AP_PASSWORD         "minebitcoin"
 
 #define WIFI_RECONNECT_MS   10000

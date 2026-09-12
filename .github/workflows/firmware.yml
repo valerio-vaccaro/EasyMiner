@@ -22,6 +22,10 @@ jobs:
           - esp32s3-headless
           - esp32-headless-led
           - esp32s3-mini-headless
+          - esp32-headless-blox
+          - esp32s3-headless-blox
+          - esp32-headless-led-blox
+          - esp32s3-mini-headless-blox
 
     steps:
       - name: Check out source

@@ -572,7 +572,7 @@ void nvs_config_reset(miner_config_t *config) {
     config->timezoneOffset = 0;    // UTC+0 default
 
     // Miner defaults
-    safeStrCpy(config->workerName, "EasyMiner", sizeof(config->workerName));
+        safeStrCpy(config->workerName, MINER_NAME, sizeof(config->workerName));
     config->mineOnCore0 = true;  // Default: mine on Core 0
     config->mineOnCore1 = true;  // Default: mine on Core 1
 

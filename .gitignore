@@ -57,4 +57,5 @@ dkms.conf
 .venv/
 firmware/
 __pycache__/
+include/generated_blox_logo.h
 .DS_Store
