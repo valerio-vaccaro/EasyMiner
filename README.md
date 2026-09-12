@@ -21,7 +21,7 @@
 
 ## 🧩 Supported CI build targets
 
-The project supports two PlatformIO board definitions and four headless hardware profiles. Each profile also has a BLOXMiner variant, for eight CI build targets total.
+The project supports two PlatformIO board definitions and four headless hardware profiles. Each profile has BLOXMiner, OfficineBitcoinMiner, and SatoshiSpritzMiner variants, for sixteen CI build targets total.
 
 | Environment | Board profile | Use case |
 | --- | --- | --- |
@@ -33,6 +33,14 @@ The project supports two PlatformIO board definitions and four headless hardware
 | `esp32s3-headless-blox` | `esp32-s3-devkitc-1` | BLOXMiner on ESP32-S3 DevKit, serial/headless |
 | `esp32-headless-led-blox` | `esp32dev` | BLOXMiner on classic ESP32 with external RGB status LED |
 | `esp32s3-mini-headless-blox` | `esp32-s3-devkitc-1` | BLOXMiner on ESP32-S3 Mini profile |
+| `esp32-headless-officinebitcoin` | `esp32dev` | OfficineBitcoinMiner on classic ESP32, serial/headless |
+| `esp32s3-headless-officinebitcoin` | `esp32-s3-devkitc-1` | OfficineBitcoinMiner on ESP32-S3 DevKit, serial/headless |
+| `esp32-headless-led-officinebitcoin` | `esp32dev` | OfficineBitcoinMiner on classic ESP32 with external RGB status LED |
+| `esp32s3-mini-headless-officinebitcoin` | `esp32-s3-devkitc-1` | OfficineBitcoinMiner on ESP32-S3 Mini profile |
+| `esp32-headless-satoshispritz` | `esp32dev` | SatoshiSpritzMiner on classic ESP32, serial/headless |
+| `esp32s3-headless-satoshispritz` | `esp32-s3-devkitc-1` | SatoshiSpritzMiner on ESP32-S3 DevKit, serial/headless |
+| `esp32-headless-led-satoshispritz` | `esp32dev` | SatoshiSpritzMiner on classic ESP32 with external RGB status LED |
+| `esp32s3-mini-headless-satoshispritz` | `esp32-s3-devkitc-1` | SatoshiSpritzMiner on ESP32-S3 Mini profile |
 
 The active board profiles and pin definitions live in [`include/board_config.h`](include/board_config.h). Only the profiles listed above are currently exposed by `platformio.ini`.
 

@@ -11,7 +11,11 @@
 // ============================================================
 // Project Info
 // ============================================================
-#ifdef BLOX_VARIANT
+#if defined(SATOSHI_SPRITZ_VARIANT)
+    #define MINER_NAME "SatoshiSpritzMiner"
+#elif defined(OFFICINE_BITCOIN_VARIANT)
+    #define MINER_NAME "OfficineBitcoinMiner"
+#elif defined(BLOX_VARIANT)
     #define MINER_NAME "BLOXMiner"
 #else
     #define MINER_NAME "EasyMiner"
@@ -195,7 +199,11 @@
 // ============================================================
 // Network Configuration
 // ============================================================
-#ifdef BLOX_VARIANT
+#if defined(SATOSHI_SPRITZ_VARIANT)
+    #define AP_SSID_PREFIX  "SatoshiSpritzMiner_"
+#elif defined(OFFICINE_BITCOIN_VARIANT)
+    #define AP_SSID_PREFIX  "OfficineBitcoinMiner_"
+#elif defined(BLOX_VARIANT)
     #define AP_SSID_PREFIX  "BLOXMiner_"
 #else
     #define AP_SSID_PREFIX  "EasyMiner_"

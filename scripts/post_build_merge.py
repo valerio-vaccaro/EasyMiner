@@ -93,6 +93,14 @@ def get_friendly_name(env_name):
         'esp32s3-headless-blox': 'blox-esp32s3-headless',
         'esp32-headless-led-blox': 'blox-esp32-headless-led',
         'esp32s3-mini-headless-blox': 'blox-esp32s3-mini-headless',
+        'esp32-headless-officinebitcoin': 'officinebitcoin-esp32-headless',
+        'esp32s3-headless-officinebitcoin': 'officinebitcoin-esp32s3-headless',
+        'esp32-headless-led-officinebitcoin': 'officinebitcoin-esp32-headless-led',
+        'esp32s3-mini-headless-officinebitcoin': 'officinebitcoin-esp32s3-mini-headless',
+        'esp32-headless-satoshispritz': 'satoshispritz-esp32-headless',
+        'esp32s3-headless-satoshispritz': 'satoshispritz-esp32s3-headless',
+        'esp32-headless-led-satoshispritz': 'satoshispritz-esp32-headless-led',
+        'esp32s3-mini-headless-satoshispritz': 'satoshispritz-esp32s3-mini-headless',
     }
     return friendly_names.get(env_name, env_name)
 

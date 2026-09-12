@@ -8,6 +8,7 @@
 #include <Arduino.h>
 #include <Preferences.h>
 #include <ArduinoJson.h>
+#include <string.h>
 #include <board_config.h>
 #include "nvs_config.h"
 #include "../stratum/stratum_types.h"
@@ -67,6 +68,21 @@ static void safeStrCpy(char *dest, const char *src, size_t maxLen) {
     } else {
         dest[0] = '\0';
     }
+}
+
+// Branded images may reuse NVS written by an EasyMiner image. Migrate only the
+// old built-in default; user-selected worker names must remain unchanged.
+static bool migrateDefaultWorkerName(miner_config_t *config) {
+#if defined(BLOX_VARIANT) || defined(OFFICINE_BITCOIN_VARIANT) || defined(SATOSHI_SPRITZ_VARIANT)
+    if (strcmp(config->workerName, "EasyMiner") == 0 ||
+        strcmp(config->workerName, "easyminer") == 0) {
+        safeStrCpy(config->workerName, MINER_NAME, sizeof(config->workerName));
+        return true;
+    }
+#else
+    (void)config;
+#endif
+    return false;
 }
 
 /**
@@ -434,6 +450,11 @@ void nvs_config_init() {
     if (nvs_config_load(&s_config)) {
         Serial.println("[NVS] Configuration loaded from NVS");
         loadedFromNvs = true;
+
+        if (migrateDefaultWorkerName(&s_config)) {
+            Serial.printf("[NVS] Migrating default worker name to %s\n", MINER_NAME);
+            nvs_config_save(&s_config);
+        }
     }
 
     // 2. If no valid NVS config, try SD card (initial setup only)
@@ -443,6 +464,8 @@ void nvs_config_init() {
         if (loadConfigFromFile(&s_config)) {
             Serial.println("[NVS] Config loaded from SD card (initial setup)");
             loadedFromSd = true;
+
+            migrateDefaultWorkerName(&s_config);
             // Save to NVS for persistence
             Serial.println("[NVS] Saving config to NVS for persistence...");
             if (nvs_config_save(&s_config)) {
@@ -572,7 +595,7 @@ void nvs_config_reset(miner_config_t *config) {
     config->timezoneOffset = 0;    // UTC+0 default
 
     // Miner defaults
-        safeStrCpy(config->workerName, MINER_NAME, sizeof(config->workerName));
+    safeStrCpy(config->workerName, MINER_NAME, sizeof(config->workerName));
     config->mineOnCore0 = true;  // Default: mine on Core 0
     config->mineOnCore1 = true;  // Default: mine on Core 1
 
