@@ -95,8 +95,25 @@ jobs:
 
       - name: Validate diyflasher catalog
         run: |
-          python3 -m json.tool diyflasher/firmwares-easyminer.json >/dev/null
-          test "$(find diyflasher/assets/easyminer -name '*.bin' | wc -l)" -eq 72
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path('diyflasher')
+          catalog = json.loads((root / 'firmwares-easyminer.json').read_text())
+          assert len(catalog) == 16, f'expected 16 firmware entries, got {len(catalog)}'
+          referenced = set()
+          for firmware in catalog:
+              assert firmware['files'], firmware['value']
+              for item in firmware['files']:
+                  relative = item['url']
+                  assert relative.startswith('assets/easyminer/'), relative
+                  path = root / relative
+                  assert path.is_file(), path
+                  referenced.add(path)
+          assert referenced, 'catalog does not reference any binary files'
+          print(f'validated {len(catalog)} catalog entries and {len(referenced)} referenced binary files')
+          PY
 
       - name: Upload diyflasher package
         uses: actions/upload-artifact@v4

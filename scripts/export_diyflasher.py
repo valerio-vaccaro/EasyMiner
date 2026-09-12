@@ -35,7 +35,7 @@ def firmware_version() -> str:
 
 
 def brand_for(environment: str) -> str:
-    if environment.endswith("-blox"):
+    if "-blox" in environment:
         return "BLOX"
     if environment.endswith("-officinebitcoin"):
         return "OfficineBitcoin"
@@ -55,7 +55,7 @@ def board_for(environment: str) -> str:
 
 
 def variant_for(environment: str) -> str:
-    if environment.endswith("-blox"):
+    if "-blox" in environment:
         return "BLOX"
     if environment.endswith("-officinebitcoin"):
         return "OfficineBitcoin"
