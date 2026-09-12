@@ -26,6 +26,14 @@ jobs:
           - esp32s3-headless-blox
           - esp32-headless-led-blox
           - esp32s3-mini-headless-blox
+          - esp32-headless-officinebitcoin
+          - esp32s3-headless-officinebitcoin
+          - esp32-headless-led-officinebitcoin
+          - esp32s3-mini-headless-officinebitcoin
+          - esp32-headless-satoshispritz
+          - esp32s3-headless-satoshispritz
+          - esp32-headless-led-satoshispritz
+          - esp32s3-mini-headless-satoshispritz
 
     steps:
       - name: Check out source
@@ -59,5 +67,41 @@ jobs:
         with:
           name: firmware-${{ matrix.environment }}
           path: artifact/${{ matrix.environment }}
+          if-no-files-found: error
+          retention-days: 30
+
+  export-diyflasher:
+    name: Export diyflasher package
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Download all firmware artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: firmware-*
+          path: artifacts
+          merge-multiple: false
+
+      - name: Build diyflasher package
+        run: python3 scripts/export_diyflasher.py
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_SHA: ${{ github.sha }}
+
+      - name: Validate diyflasher catalog
+        run: |
+          python3 -m json.tool diyflasher/firmwares-easyminer.json >/dev/null
+          test "$(find diyflasher/assets/easyminer -name '*.bin' | wc -l)" -eq 72
+
+      - name: Upload diyflasher package
+        uses: actions/upload-artifact@v4
+        with:
+          name: diyflasher-easyminer
+          path: diyflasher
           if-no-files-found: error
           retention-days: 30

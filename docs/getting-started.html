@@ -1,7 +1,39 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Get started · EasyMiner</title><link rel="stylesheet" href="style.css"></head>
-<body><nav class="nav"><div class="wrap"><a class="brand" href="index.html">⛏️ EasyMiner</a><a href="getting-started.html">Get started</a><a href="boards.html">Boards</a><a href="firmware.html">Firmware</a></div></nav><main class="wrap"><section class="hero"><div class="eyebrow">Quick start</div><h1>From source to dashboard.</h1><p class="lead">Build with PlatformIO, flash your board, and configure it from the captive portal.</p></section><h2>1. Install PlatformIO</h2><p>Use the PlatformIO CLI or the PlatformIO IDE extension for VS Code.</p><pre><code>pio --version</code></pre><h2>2. Build and flash</h2><pre><code>pio run -e esp32-headless
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Get started · EasyMiner</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<nav class="nav"><div class="wrap"><a class="brand" href="index.html">⛏️ EasyMiner</a><a href="getting-started.html">Get started</a><a href="boards.html">Boards</a><a href="firmware.html">Firmware</a></div></nav>
+<main class="wrap">
+<section class="hero"><div class="eyebrow">Quick start</div><h1>From source to dashboard.</h1><p class="lead">Build, flash, and configure any of the sixteen EasyMiner, BLOXMiner, OfficineBitcoinMiner, or SatoshiSpritzMiner targets.</p></section>
+<h2>1. Install PlatformIO</h2>
+<p>Use the PlatformIO CLI or the PlatformIO IDE extension for VS Code.</p>
+<pre><code>pio --version</code></pre>
+<h2>2. Choose, build, and flash</h2>
+<p>Choose an environment from the <a href="boards.html">supported variants matrix</a>. For example:</p>
+<pre><code># Standard EasyMiner
 pio run -e esp32-headless -t upload
 
-# ESP32-S3 DevKit
-pio run -e esp32s3-headless -t upload</code></pre><h2>3. Configure Wi-Fi and mining</h2><ol><li>On first boot, join the <code>EasyMiner_XXXX</code> Wi-Fi network.</li><li>Complete the captive portal with your Wi-Fi, wallet, worker, and pool settings.</li><li>Open <code>http://easyminer.local/</code> from a device on the same network. If mDNS is unavailable, use the device IP shown in the serial log or router DHCP list. The dashboard is on HTTP port <code>80</code>; live statistics use WebSocket port <code>81</code>.</li></ol><div class="notice">Keep wallet and pool credentials out of source control and issue reports.</div><h2>Build outputs</h2><p>PlatformIO places raw files in <code>.pio/build/&lt;environment&gt;</code>. The post-build script also prepares named update and factory images for CI packaging.</p></main><footer class="footer"><div class="wrap"><a href="index.html">← EasyMiner home</a></div></footer></body></html>
+# BLOXMiner
+pio run -e esp32-headless-blox -t upload
+
+# OfficineBitcoinMiner
+pio run -e esp32-headless-officinebitcoin -t upload
+
+# SatoshiSpritzMiner
+pio run -e esp32-headless-satoshispritz -t upload
+
+# ESP32-S3 SatoshiSpritzMiner
+pio run -e esp32s3-headless-satoshispritz -t upload</code></pre>
+<p>For multiple boards, specify the port with <code>--upload-port /dev/ttyUSB0</code>. PlatformIO embeds the selected brand logo during the build.</p>
+<h2>3. Configure Wi-Fi and mining</h2>
+<p>On first boot, join the access point matching the selected brand:</p>
+<ul><li><code>EasyMiner_XXXX</code></li><li><code>BLOXMiner_XXXX</code></li><li><code>OfficineBitcoinMiner_XXXX</code></li><li><code>SatoshiSpritzMiner_XXXX</code></li></ul>
+<p>Complete the captive portal with Wi-Fi, wallet, worker, and pool settings. The default pool is <code>solo.homeminingitalia.org</code> on port <code>3340</code>, with password <code>x</code>. The default worker is the selected firmware brand.</p>
+<p>Open <code>http://easyminer.local/</code> from a device on the same network. If mDNS is unavailable, use the device IP shown in the serial log or router DHCP list. The dashboard uses HTTP port <code>80</code>; live statistics use WebSocket port <code>81</code>.</p>
+<div class="notice">Keep wallet and pool credentials out of source control and issue reports. The repository link shown by every firmware variant remains <code>https://github.com/valerio-vaccaro/EasyMiner</code>.</div>
+<h2>Build outputs</h2>
+<p>PlatformIO places raw files in <code>.pio/build/&lt;environment&gt;</code>. The post-build script also prepares named update and factory images for CI packaging.</p>
+<p>GitHub Actions also creates a <code>diyflasher-easyminer</code> artifact after all sixteen builds complete. It contains <code>firmwares-easyminer.json</code> and the factory/component images under <code>assets/easyminer/</code>, ready to be copied into a <a href="https://github.com/valerio-vaccaro/diyflasher">diyflasher</a> checkout.</p>
+</main>
+<footer class="footer"><div class="wrap"><a href="index.html">← EasyMiner home</a></div></footer>
+</body></html>

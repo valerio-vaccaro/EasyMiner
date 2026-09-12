@@ -132,6 +132,7 @@ static String applyBranding(String p) {
 #endif
     p.replace(REPOSITORY_TOKEN, REPOSITORY_URL);
     p.replace(REPOSITORY_LABEL_TOKEN, "EasyMiner");
+    p.replace("setPool('solo.homeminingitalia.org',3333)", "setPool('solo.homeminingitalia.org',3340)");
     return p;
 }
 

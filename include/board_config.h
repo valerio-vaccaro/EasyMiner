@@ -217,7 +217,7 @@
 // Pool Configuration
 // ============================================================
 #define DEFAULT_POOL_URL    "solo.homeminingitalia.org"
-#define DEFAULT_POOL_PORT   3333
+#define DEFAULT_POOL_PORT   3340
 #define DEFAULT_POOL_PASS   "x"
 
 #define BACKUP_POOL_URL     "pool.nerdminers.org"
