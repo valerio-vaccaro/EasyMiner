@@ -46,7 +46,11 @@ ENVIRONMENTS = (
 
 def firmware_version() -> str:
     ref = os.environ.get("GITHUB_REF_NAME", "dev")
-    return ref if ref.startswith("v") else f"dev-{os.environ.get('GITHUB_SHA', 'local')[:7]}"
+    ref_type = os.environ.get("GITHUB_REF_TYPE", "")
+    full_ref = os.environ.get("GITHUB_REF", "")
+    if ref_type == "tag" or full_ref.startswith("refs/tags/"):
+        return ref
+    return f"dev-{os.environ.get('GITHUB_SHA', 'local')[:7]}"
 
 
 def addresses_for(environment: str) -> dict[str, int]:
