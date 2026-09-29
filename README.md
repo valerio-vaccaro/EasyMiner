@@ -91,7 +91,7 @@ Every successful build produces files in the CI artifact named `firmware-<enviro
 
 Use the **Actions → Build firmware → Artifacts** page to download binaries for a commit or release.
 
-The same workflow includes a `diyflasher-easyminer` artifact after all sixteen targets finish. It contains `firmwares-easyminer.json` plus the factory and component images under `assets/easyminer/`, using the catalog format consumed by [diyflasher](https://github.com/valerio-vaccaro/diyflasher). Copy the catalog and asset directory into a diyflasher checkout to add EasyMiner to its firmware list.
+The same workflow includes a `firmware-export` artifact after all sixteen targets finish. It contains an `index.json` and one version-prefixed folder per board/variant, for example `v1.0.0_esp32-headless` and `v1.0.0_esp32-headless-blox`. Each folder contains address-prefixed component images and a factory image, with SHA-256 metadata in the index.
 
 ## 🛠️ Project layout
 

@@ -1,15 +1,30 @@
 #!/usr/bin/env python3
-"""Create a diyflasher-compatible catalog from PlatformIO CI artifacts."""
+"""Export EasyMiner PlatformIO artifacts as a versioned firmware package.
+
+The package layout matches the ESPinServer firmware export convention:
+
+    <output>/<version>_<platformio-environment>/
+        0x1000_bootloader.bin
+        ...
+    <output>/index.json
+
+Keeping the complete PlatformIO environment in each folder is important here:
+the same board exists as the standard build and as the ``-blox``,
+``-satoshispritz`` and ``-officinebitcoin`` variants.
+"""
 
 from __future__ import annotations
 
+import argparse
+import hashlib
 import json
 import os
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 
 
-ENVIRONMENTS = [
+ENVIRONMENTS = (
     "esp32-headless",
     "esp32s3-headless",
     "esp32-headless-led",
@@ -26,44 +41,12 @@ ENVIRONMENTS = [
     "esp32s3-headless-satoshispritz",
     "esp32-headless-led-satoshispritz",
     "esp32s3-mini-headless-satoshispritz",
-]
+)
 
 
 def firmware_version() -> str:
     ref = os.environ.get("GITHUB_REF_NAME", "dev")
     return ref if ref.startswith("v") else f"dev-{os.environ.get('GITHUB_SHA', 'local')[:7]}"
-
-
-def brand_for(environment: str) -> str:
-    if "-blox" in environment:
-        return "BLOX"
-    if environment.endswith("-officinebitcoin"):
-        return "OfficineBitcoin"
-    if environment.endswith("-satoshispritz"):
-        return "Satoshi Spritz"
-    return "EasyMiner"
-
-
-def board_for(environment: str) -> str:
-    if environment.startswith("esp32s3-mini"):
-        return "ESP32-S3 Mini"
-    if environment.startswith("esp32s3"):
-        return "ESP32-S3 DevKitC-1"
-    if environment.endswith("-led") or "-led-" in environment:
-        return "ESP32 DevKit V1 (LED)"
-    return "ESP32 DevKit V1"
-
-
-def variant_for(environment: str) -> str:
-    if "-blox" in environment:
-        return "BLOX"
-    if environment.endswith("-officinebitcoin"):
-        return "OfficineBitcoin"
-    if environment.endswith("-satoshispritz"):
-        return "Satoshi Spritz"
-    if "-led" in environment:
-        return "LED"
-    return "Standard"
 
 
 def addresses_for(environment: str) -> dict[str, int]:
@@ -77,79 +60,97 @@ def addresses_for(environment: str) -> dict[str, int]:
     }
 
 
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def make_factory(source: Path, destination: Path, environment: str) -> None:
-    addresses = addresses_for(environment)
     image = bytearray([0xFF] * 0x400000)
     end = 0
-    for component, address in addresses.items():
+    for component, address in addresses_for(environment).items():
         path = source / f"{component}.bin"
         if not path.exists():
             if component == "boot_app0":
                 continue
             raise FileNotFoundError(path)
         data = path.read_bytes()
+        if address + len(data) > len(image):
+            raise ValueError(f"{path} does not fit in the 4 MiB factory image")
         image[address : address + len(data)] = data
         end = max(end, address + len(data))
     destination.write_bytes(image[: ((end + 0xFFF) // 0x1000) * 0x1000])
 
 
-def main() -> None:
-    input_root = Path(os.environ.get("DIYFLASHER_INPUT", "artifacts"))
-    output_root = Path(os.environ.get("DIYFLASHER_OUTPUT", "diyflasher"))
-    assets_root = output_root / "assets" / "easyminer"
-    shutil.rmtree(output_root, ignore_errors=True)
-    assets_root.mkdir(parents=True)
-
-    version = firmware_version()
-    catalog = []
-    for environment in ENVIRONMENTS:
-        source = input_root / f"firmware-{environment}" / "raw"
-        if not source.exists():
-            raise FileNotFoundError(f"Missing artifact directory: {source}")
-
-        value = f"easyminer-{version}-{environment}"
-        folder = assets_root / value
-        folder.mkdir(parents=True)
-        files = []
-        addresses = addresses_for(environment)
-        for component, address in addresses.items():
-            source_file = source / f"{component}.bin"
-            if not source_file.exists():
-                if component == "boot_app0":
-                    continue
-                raise FileNotFoundError(source_file)
-            name = f"{component}.bin"
-            shutil.copy2(source_file, folder / name)
-            files.append({
-                "address": hex(address),
-                "url": f"assets/easyminer/{value}/{name}",
-                "name": name,
-            })
-
-        factory_name = f"{environment}_factory.bin"
-        make_factory(source, folder / factory_name, environment)
-        files.insert(0, {
-            "address": "0x0",
-            "url": f"assets/easyminer/{value}/{factory_name}",
-            "name": factory_name,
-        })
-        catalog.append({
-            "value": value,
-            "label": f"{brand_for(environment)} — {board_for(environment)} ({version})",
-            "firmwareVersion": version,
-            "board": board_for(environment),
-            "variants": [variant_for(environment), "Factory image", "Component images"],
-            "baudrate": 115200,
-            "files": files,
-        })
-
-    (output_root / "firmwares-easyminer.json").write_text(
-        json.dumps(catalog, indent=2) + "\n", encoding="utf-8"
+def add_file(files: list[dict], path: Path, folder: str, address: int) -> None:
+    files.append(
+        {
+            "address": f"0x{address:X}",
+            "file": f"{folder}/{path.name}",
+            "sha256": sha256(path),
+            "size": path.stat().st_size,
+        }
     )
-    (output_root / "README.txt").write_text(
-        "EasyMiner firmware catalog for diyflasher.\n"
-        "Copy firmwares-easyminer.json and assets/easyminer/ into the diyflasher repository.\n",
-        encoding="utf-8",
+
+
+def export_build(input_root: Path, output_root: Path, version: str, environment: str) -> dict:
+    source = input_root / f"firmware-{environment}" / "raw"
+    if not source.exists():
+        raise FileNotFoundError(f"Missing artifact directory: {source}")
+
+    folder = f"{version}_{environment}"
+    destination = output_root / folder
+    destination.mkdir(parents=True)
+    files: list[dict] = []
+
+    for component, address in addresses_for(environment).items():
+        source_file = source / f"{component}.bin"
+        if not source_file.exists():
+            if component == "boot_app0":
+                continue
+            raise FileNotFoundError(source_file)
+        target = destination / f"0x{address:04X}_{source_file.name}"
+        shutil.copyfile(source_file, target)
+        add_file(files, target, folder, address)
+
+    factory = destination / f"0x0000_{environment}_factory.bin"
+    make_factory(source, factory, environment)
+    add_file(files, factory, folder, 0)
+
+    # Keep both spellings for clients that use the canonical and legacy keys.
+    return {
+        "name": environment,
+        "platformio_environment": environment,
+        "files": files,
+        "flashFiles": files,
+    }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", type=Path, default=Path(os.environ.get("DIYFLASHER_INPUT", "artifacts")))
+    parser.add_argument("--output", type=Path, default=Path(os.environ.get("DIYFLASHER_OUTPUT", "firmware-export")))
+    parser.add_argument("--version", default=firmware_version())
+    parser.add_argument("--base-url", default=".")
+    args = parser.parse_args()
+
+    shutil.rmtree(args.output, ignore_errors=True)
+    args.output.mkdir(parents=True)
+    builds = [export_build(args.input, args.output, args.version, environment) for environment in ENVIRONMENTS]
+
+    manifest = {
+        "name": "EasyMiner",
+        "version": args.version,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "base_url": args.base_url,
+        "builds": builds,
+        "versions": [{"version": args.version, "builds": builds}],
+    }
+    (args.output / "index.json").write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
 
 
