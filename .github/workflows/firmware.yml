@@ -70,8 +70,8 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  export-diyflasher:
-    name: Export diyflasher package
+  export-firmware:
+    name: Export firmware package
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -87,38 +87,39 @@ jobs:
           path: artifacts
           merge-multiple: false
 
-      - name: Build diyflasher package
+      - name: Build firmware package
         run: python3 scripts/export_diyflasher.py
         env:
           GITHUB_REF_NAME: ${{ github.ref_name }}
           GITHUB_SHA: ${{ github.sha }}
 
-      - name: Validate diyflasher catalog
+      - name: Validate firmware index
         run: |
           python3 - <<'PY'
           import json
           from pathlib import Path
 
-          root = Path('diyflasher')
-          catalog = json.loads((root / 'firmwares-easyminer.json').read_text())
-          assert len(catalog) == 16, f'expected 16 firmware entries, got {len(catalog)}'
+          root = Path('firmware-export')
+          manifest = json.loads((root / 'index.json').read_text())
+          assert len(manifest['builds']) == 16
+          assert len(manifest['versions']) == 1
           referenced = set()
-          for firmware in catalog:
-              assert firmware['files'], firmware['value']
-              for item in firmware['files']:
-                  relative = item['url']
-                  assert relative.startswith('assets/easyminer/'), relative
-                  path = root / relative
+          for build in manifest['builds']:
+              assert build['files'], build['name']
+              for item in build['files']:
+                  path = root / item['file']
                   assert path.is_file(), path
+                  assert item['sha256']
                   referenced.add(path)
-          assert referenced, 'catalog does not reference any binary files'
-          print(f'validated {len(catalog)} catalog entries and {len(referenced)} referenced binary files')
+          assert referenced
+          assert all(path.parent.name.startswith(manifest['version'] + '_') for path in referenced)
+          print(f"validated {len(manifest['builds'])} builds and {len(referenced)} files")
           PY
 
-      - name: Upload diyflasher package
+      - name: Upload firmware package
         uses: actions/upload-artifact@v4
         with:
-          name: diyflasher-easyminer
-          path: diyflasher
+          name: firmware-export
+          path: firmware-export
           if-no-files-found: error
           retention-days: 30
