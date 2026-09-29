@@ -20,8 +20,8 @@ import hashlib
 import json
 import os
 import shutil
-from datetime import datetime, timezone
 from pathlib import Path
+from datetime import datetime, timezone
 
 
 ENVIRONMENTS = (
@@ -72,14 +72,27 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def boot_app0_source() -> Path | None:
+    """Locate Arduino-ESP32's OTA bootstrap image."""
+    candidates = (
+        Path.home() / ".platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin",
+        Path.home() / ".platformio/packages/framework-arduinoespressif32-libs/tools/partitions/boot_app0.bin",
+    )
+    return next((candidate for candidate in candidates if candidate.exists()), None)
+
+
 def make_factory(source: Path, destination: Path, environment: str) -> None:
     image = bytearray([0xFF] * 0x400000)
     end = 0
     for component, address in addresses_for(environment).items():
         path = source / f"{component}.bin"
+        if component == "boot_app0" and not path.exists():
+            packaged = boot_app0_source()
+            if packaged is not None:
+                path = packaged
         if not path.exists():
             if component == "boot_app0":
-                continue
+                raise FileNotFoundError("boot_app0.bin (install the Arduino-ESP32 PlatformIO framework)")
             raise FileNotFoundError(path)
         data = path.read_bytes()
         if address + len(data) > len(image):
@@ -112,9 +125,13 @@ def export_build(input_root: Path, output_root: Path, version: str, environment:
 
     for component, address in addresses_for(environment).items():
         source_file = source / f"{component}.bin"
+        if component == "boot_app0" and not source_file.exists():
+            packaged = boot_app0_source()
+            if packaged is not None:
+                source_file = packaged
         if not source_file.exists():
             if component == "boot_app0":
-                continue
+                raise FileNotFoundError("boot_app0.bin (install the Arduino-ESP32 PlatformIO framework)")
             raise FileNotFoundError(source_file)
         target = destination / f"0x{address:04X}_{source_file.name}"
         shutil.copyfile(source_file, target)
