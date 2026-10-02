@@ -73,7 +73,7 @@ static void safeStrCpy(char *dest, const char *src, size_t maxLen) {
 // Branded images may reuse NVS written by an EasyMiner image. Migrate only the
 // old built-in default; user-selected worker names must remain unchanged.
 static bool migrateDefaultWorkerName(miner_config_t *config) {
-#if defined(BLOX_VARIANT) || defined(OFFICINE_BITCOIN_VARIANT) || defined(SATOSHI_SPRITZ_VARIANT)
+#if defined(BLOX_VARIANT) || defined(OFFICINE_BITCOIN_VARIANT) || defined(SATOSHI_SPRITZ_VARIANT) || defined(SBAMMINER_VARIANT)
     if (strcmp(config->workerName, "EasyMiner") == 0 ||
         strcmp(config->workerName, "easyminer") == 0) {
         safeStrCpy(config->workerName, MINER_NAME, sizeof(config->workerName));

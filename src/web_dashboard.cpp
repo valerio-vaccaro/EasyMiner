@@ -1,187 +1,390 @@
 #include "web_dashboard.h"
-#include <WiFi.h>
-#include <WebServer.h>
-#include <WebSocketsServer.h>
+
 #include <ArduinoJson.h>
 #include <Preferences.h>
-#include "mining/miner.h"
-#include "stratum/stratum.h"
+#include <WebServer.h>
+#include <WebSocketsServer.h>
+#include <WiFi.h>
+
 #include "config/nvs_config.h"
 #include "config/wifi_manager.h"
-#include "generated_blox_logo.h"
-#include "generated_officinebitcoin_logo.h"
-#include "generated_satoshispritz_logo.h"
+#include "generated_web_assets.h"
+#include "mining/miner.h"
+#include "stratum/stratum.h"
+
+namespace {
 
 #if defined(ESP32_HEADLESS)
-static constexpr int STATS_LED_PIN = 2;
+constexpr int STATS_LED_PIN = 2;
 #elif defined(ESP32_S3_DEVKIT)
-static constexpr int STATS_LED_PIN = 48;
+constexpr int STATS_LED_PIN = 48;
 #else
-static constexpr int STATS_LED_PIN = -1;
+constexpr int STATS_LED_PIN = -1;
 #endif
 
-static WebServer server(80);
-static WebSocketsServer socket(81);
-static uint32_t statsLedOffAt = 0;
-static uint32_t hardwareStatsUpdatedAt = 0;
-static bool hardwareStatsReady = false;
-static float cachedTemperature = 0;
-static uint32_t cachedFreeHeap = 0;
-static uint32_t cachedMinFreeHeap = 0;
-static uint32_t cachedHeapSize = 0;
-static uint32_t cachedCpuMHz = 0;
+constexpr uint32_t STATS_INTERVAL_MS = 10000;
 
-static void updateHardwareStats() {
-    cachedTemperature = temperatureRead();
-    cachedFreeHeap = ESP.getFreeHeap();
-    cachedMinFreeHeap = ESP.getMinFreeHeap();
-    cachedHeapSize = ESP.getHeapSize();
-    cachedCpuMHz = ESP.getCpuFreqMHz();
-    hardwareStatsUpdatedAt = millis();
-    hardwareStatsReady = true;
-}
-static const char PAGE[] PROGMEM = R"HTML(<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>EasyMiner</title><style>body{margin:0;background:#101318;color:#e7edf5;font:15px system-ui;padding-top:72px;padding-bottom:58px}main{max-width:1100px;margin:auto;padding:20px}.topbar,.bottombar{position:fixed;left:0;right:0;z-index:10;background:#171e27;border-color:#2d3745;box-shadow:0 4px 18px rgba(0,0,0,.3)}.topbar{top:0;border-bottom:1px solid}.bottombar{bottom:0;border-top:1px solid}.barinner{max-width:1100px;margin:auto;min-height:58px;padding:0 20px;display:flex;align-items:center;gap:14px;box-sizing:border-box}.brand{font-size:20px;font-weight:800;color:#f7931a;letter-spacing:.4px}.topnav{margin-left:auto;display:flex;gap:8px}.topnav a{padding:8px 11px}.bottombar .barinner{min-height:44px;justify-content:center;color:#9ba8b8;font-size:12px}.bottombar a{background:transparent;color:#f7931a;padding:0}h1{color:#f7931a}.statusbox{display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:12px 16px;background:#1b222c;border:1px solid #2d3745;border-left:4px solid #f7931a;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.22);animation:rise .45s ease both}.statusbox .v{display:inline-block;margin-left:8px;font-size:18px}.grid{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:12px}.card{grid-column:span 2}.wide{grid-column:span 5}@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}@keyframes float{50%{transform:translateY(-3px) rotate(-3deg)}}@keyframes valuePulse{from{text-shadow:0 0 0 rgba(247,147,26,0)}to{text-shadow:0 0 13px rgba(247,147,26,.35)}}@keyframes blink{50%{opacity:.45}}@keyframes glow{50%{box-shadow:0 0 18px rgba(85,194,255,.3)}}.card{background:#1b222c;border-radius:10px;padding:16px}.v{font-size:24px;font-weight:700;color:#f7931a;overflow-wrap:anywhere}.card .v{font-size:20px}canvas{width:100%;height:170px;background:#151b23;border-radius:8px;margin-top:14px}.chartbox{background:#1b222c;border:1px solid #2d3745;border-radius:10px;padding:16px;margin-top:14px}.chartbox h3{margin:0 0 5px;color:#f7931a}small{color:#9ba8b8}a,button{color:#101318;background:#f7931a;padding:9px;border:0;border-radius:5px;text-decoration:none;font-weight:bold}@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}@keyframes float{50%{transform:translateY(-3px) rotate(-3deg)}}@keyframes valuePulse{from{text-shadow:0 0 0 rgba(247,147,26,0)}to{text-shadow:0 0 13px rgba(247,147,26,.35)}}@keyframes blink{50%{opacity:.45}}@keyframes glow{50%{box-shadow:0 0 18px rgba(85,194,255,.3)}}.card{position:relative;overflow:hidden;border:1px solid #2d3745;box-shadow:0 8px 24px rgba(0,0,0,.22);animation:rise .55s ease both}.card:nth-child(2){animation-delay:.05s}.card:nth-child(3){animation-delay:.1s}.card:nth-child(4){animation-delay:.15s}.card:nth-child(5){animation-delay:.2s}.card:nth-child(6){animation-delay:.25s}.card:nth-child(7){animation-delay:.3s}.card:nth-child(8){animation-delay:.35s}.card:before{content:"";position:absolute;inset:0;background:linear-gradient(120deg,rgba(247,147,26,.12),transparent 45%);pointer-events:none}.card:hover{transform:translateY(-4px);border-color:#f7931a;box-shadow:0 12px 30px rgba(247,147,26,.18)}.icon{display:inline-block;font-size:27px;margin-right:8px;filter:drop-shadow(0 0 7px rgba(247,147,26,.6));animation:float 2.5s ease-in-out infinite}.label{color:#aebbd0}.v{position:relative;animation:valuePulse 1.8s ease-in-out infinite alternate}.live{display:inline-block;color:#63e6be;border:1px solid #2d8d73;border-radius:20px;padding:3px 9px;font-size:11px;letter-spacing:1px;animation:blink 1.5s infinite} rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}} float{50%{transform:translateY(-3px) rotate(-3deg)}} valuePulse{from{text-shadow:0 0 0 rgba(247,147,26,0)}to{text-shadow:0 0 13px rgba(247,147,26,.35)}} blink{50%{opacity:.45}} glow{50%{box-shadow:0 0 18px rgba(85,194,255,.3)}}canvas{border:1px solid #2d3745;box-shadow:0 0 20px rgba(85,194,255,.08);animation:glow 3s infinite}.btc-bg{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:-1}.btc-bg span{position:absolute;color:rgba(247,147,26,.12);font-size:clamp(22px,4vw,54px);font-weight:800;animation:btcFly linear infinite}.btc-bg span:nth-child(1){left:8%;animation-duration:19s;animation-delay:-4s}.btc-bg span:nth-child(2){left:27%;animation-duration:24s;animation-delay:-15s}.btc-bg span:nth-child(3){left:49%;animation-duration:21s;animation-delay:-9s}.btc-bg span:nth-child(4){left:71%;animation-duration:27s;animation-delay:-19s}.btc-bg span:nth-child(5){left:90%;animation-duration:22s;animation-delay:-13s}.btc-bg span:nth-child(6){left:16%;animation-duration:26s;animation-delay:-21s;opacity:.07;animation-name:btcFlyDown}.btc-bg span:nth-child(7){left:38%;animation-duration:23s;animation-delay:-7s;opacity:.16;animation-name:btcFlyDown}.btc-bg span:nth-child(8){left:61%;animation-duration:29s;animation-delay:-17s;opacity:.08;animation-name:btcFlyDown}.btc-bg span:nth-child(9){left:82%;animation-duration:25s;animation-delay:-3s;opacity:.14;animation-name:btcFlyDown}.btc-bg span:nth-child(10){left:4%;animation-duration:31s;animation-delay:-25s;opacity:.06;animation-name:btcFlyDown}.btc-bg span:nth-child(11){left:12%;animation-duration:28s;animation-delay:-12s;animation-name:btcFlyOblique;opacity:.08}.btc-bg span:nth-child(12){left:34%;animation-duration:25s;animation-delay:-20s;animation-name:btcFlyObliqueDown;opacity:.13}.btc-bg span:nth-child(13){left:56%;animation-duration:30s;animation-delay:-6s;animation-name:btcFlyOblique;opacity:.06}.btc-bg span:nth-child(14){left:77%;animation-duration:23s;animation-delay:-16s;animation-name:btcFlyObliqueDown;opacity:.11}.btc-bg span:nth-child(15){left:95%;animation-duration:32s;animation-delay:-27s;animation-name:btcFlyOblique;opacity:.07}.btc-bg span:nth-child(16){left:45%;animation-duration:26s;animation-delay:-22s;animation-name:btcFlyObliqueDown;opacity:.09}@keyframes btcFlyOblique{from{transform:translate3d(-18vw,110vh,0) rotate(-90deg)}to{transform:translate3d(24vw,-15vh,0) rotate(420deg)}}@keyframes btcFlyObliqueDown{from{transform:translate3d(20vw,-15vh,0) rotate(120deg)}to{transform:translate3d(-24vw,110vh,0) rotate(-300deg)}}@keyframes btcFly{from{transform:translate3d(0,110vh,0) rotate(-18deg)}to{transform:translate3d(70px,-18vh,0) rotate(360deg)}}@keyframes btcFlyDown{from{transform:translate3d(0,-18vh,0) rotate(160deg)}to{transform:translate3d(-80px,110vh,0) rotate(-220deg)}}.rain{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:20}.drop{position:absolute;top:-2rem;font-size:2rem;animation:rainfall 2s ease-in forwards}@keyframes rainfall{to{transform:translateY(110vh) rotate(540deg);opacity:0}}@media(max-width:700px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.card,.wide{grid-column:span 1}.card .v{font-size:18px}}</style></head><body><div class=btc-bg aria-hidden=true><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span style="left:3%;animation-name:btcFlyOblique;animation-duration:22s;animation-delay:-0s;opacity:.5">&#8383;</span><span style="left:10%;animation-name:btcFlyObliqueDown;animation-duration:23s;animation-delay:-3s;opacity:.6">&#8383;</span><span style="left:17%;animation-name:btcFlyOblique;animation-duration:24s;animation-delay:-6s;opacity:.7">&#8383;</span><span style="left:24%;animation-name:btcFlyObliqueDown;animation-duration:25s;animation-delay:-9s;opacity:.8">&#8383;</span><span style="left:31%;animation-name:btcFlyOblique;animation-duration:26s;animation-delay:-12s;opacity:.9">&#8383;</span><span style="left:38%;animation-name:btcFlyObliqueDown;animation-duration:27s;animation-delay:-15s;opacity:.5">&#8383;</span><span style="left:45%;animation-name:btcFlyOblique;animation-duration:28s;animation-delay:-18s;opacity:.6">&#8383;</span><span style="left:52%;animation-name:btcFlyObliqueDown;animation-duration:22s;animation-delay:-21s;opacity:.7">&#8383;</span><span style="left:59%;animation-name:btcFlyOblique;animation-duration:23s;animation-delay:-24s;opacity:.8">&#8383;</span><span style="left:66%;animation-name:btcFlyObliqueDown;animation-duration:24s;animation-delay:-2s;opacity:.9">&#8383;</span><span style="left:73%;animation-name:btcFlyOblique;animation-duration:25s;animation-delay:-5s;opacity:.5">&#8383;</span><span style="left:80%;animation-name:btcFlyObliqueDown;animation-duration:26s;animation-delay:-8s;opacity:.6">&#8383;</span><span style="left:87%;animation-name:btcFlyOblique;animation-duration:27s;animation-delay:-11s;opacity:.7">&#8383;</span><span style="left:94%;animation-name:btcFlyObliqueDown;animation-duration:28s;animation-delay:-14s;opacity:.8">&#8383;</span><span style="left:3%;animation-name:btcFlyOblique;animation-duration:22s;animation-delay:-17s;opacity:.9">&#8383;</span><span style="left:10%;animation-name:btcFlyObliqueDown;animation-duration:23s;animation-delay:-20s;opacity:.5">&#8383;</span><span style="left:2%;animation-name:btcFlyOblique;animation-duration:20s;animation-delay:0s;opacity:0.045">&#8383;</span><span style="left:7%;animation-name:btcFlyDown;animation-duration:21s;animation-delay:-3s;opacity:0.075">&#8383;</span><span style="left:12%;animation-name:btcFly;animation-duration:22s;animation-delay:-6s;opacity:0.11">&#8383;</span><span style="left:17%;animation-name:btcFlyDown;animation-duration:23s;animation-delay:-9s;opacity:0.16">&#8383;</span><span style="left:22%;animation-name:btcFly;animation-duration:24s;animation-delay:-12s;opacity:0.22">&#8383;</span><span style="left:27%;animation-name:btcFlyDown;animation-duration:25s;animation-delay:-15s;opacity:0.08">&#8383;</span><span style="left:32%;animation-name:btcFlyOblique;animation-duration:26s;animation-delay:-18s;opacity:0.045">&#8383;</span><span style="left:37%;animation-name:btcFlyDown;animation-duration:20s;animation-delay:-21s;opacity:0.075">&#8383;</span><span style="left:42%;animation-name:btcFly;animation-duration:21s;animation-delay:-24s;opacity:0.11">&#8383;</span><span style="left:47%;animation-name:btcFlyDown;animation-duration:22s;animation-delay:-27s;opacity:0.16">&#8383;</span><span style="left:52%;animation-name:btcFly;animation-duration:23s;animation-delay:-30s;opacity:0.22">&#8383;</span><span style="left:57%;animation-name:btcFlyDown;animation-duration:24s;animation-delay:-33s;opacity:0.08">&#8383;</span><span style="left:62%;animation-name:btcFlyOblique;animation-duration:25s;animation-delay:-36s;opacity:0.045">&#8383;</span><span style="left:67%;animation-name:btcFlyDown;animation-duration:26s;animation-delay:-39s;opacity:0.075">&#8383;</span><span style="left:72%;animation-name:btcFly;animation-duration:20s;animation-delay:-42s;opacity:0.11">&#8383;</span><span style="left:77%;animation-name:btcFlyDown;animation-duration:21s;animation-delay:-45s;opacity:0.16">&#8383;</span><span style="left:82%;animation-name:btcFly;animation-duration:22s;animation-delay:-48s;opacity:0.22">&#8383;</span><span style="left:87%;animation-name:btcFlyDown;animation-duration:23s;animation-delay:-51s;opacity:0.08">&#8383;</span><span style="left:92%;animation-name:btcFlyOblique;animation-duration:24s;animation-delay:-54s;opacity:0.045">&#8383;</span><span style="left:97%;animation-name:btcFlyDown;animation-duration:25s;animation-delay:-57s;opacity:0.075">&#8383;</span><span style="left:1%;animation-name:btcFlyOblique;animation-duration:18s;animation-delay:0s;color:#f7931a;opacity:0.32">&#8383;</span><span style="left:8%;animation-name:btcFlyDown;animation-duration:19s;animation-delay:-3s;color:#080b10;opacity:0.42">&#8383;</span><span style="left:15%;animation-name:btcFly;animation-duration:20s;animation-delay:-6s;color:#252d38;opacity:0.5">&#8383;</span><span style="left:22%;animation-name:btcFlyDown;animation-duration:21s;animation-delay:-9s;color:#f7931a;opacity:0.32">&#8383;</span><span style="left:29%;animation-name:btcFlyOblique;animation-duration:22s;animation-delay:-12s;color:#080b10;opacity:0.42">&#8383;</span><span style="left:36%;animation-name:btcFlyDown;animation-duration:23s;animation-delay:-15s;color:#252d38;opacity:0.5">&#8383;</span><span style="left:43%;animation-name:btcFly;animation-duration:18s;animation-delay:-18s;color:#f7931a;opacity:0.32">&#8383;</span><span style="left:50%;animation-name:btcFlyDown;animation-duration:19s;animation-delay:-21s;color:#080b10;opacity:0.42">&#8383;</span><span style="left:57%;animation-name:btcFlyOblique;animation-duration:20s;animation-delay:-24s;color:#252d38;opacity:0.5">&#8383;</span><span style="left:64%;animation-name:btcFlyDown;animation-duration:21s;animation-delay:-27s;color:#f7931a;opacity:0.32">&#8383;</span><span style="left:71%;animation-name:btcFly;animation-duration:22s;animation-delay:-30s;color:#080b10;opacity:0.42">&#8383;</span><span style="left:78%;animation-name:btcFlyDown;animation-duration:23s;animation-delay:-33s;color:#252d38;opacity:0.5">&#8383;</span><span style="left:85%;animation-name:btcFlyOblique;animation-duration:18s;animation-delay:-36s;color:#f7931a;opacity:0.32">&#8383;</span><span style="left:92%;animation-name:btcFlyDown;animation-duration:19s;animation-delay:-39s;color:#080b10;opacity:0.42">&#8383;</span><span style="left:0%;animation-name:btcFly;animation-duration:20s;animation-delay:-42s;color:#252d38;opacity:0.5">&#8383;</span><span style="left:7%;animation-name:btcFlyDown;animation-duration:21s;animation-delay:-45s;color:#f7931a;opacity:0.32">&#8383;</span></div><header class=topbar><div class=barinner><span class=brand>EasyMiner</span><span class=live>LIVE</span><nav class=topnav><a href=/>Home</a><a href=/config>Configuration</a><a href=/about>About</a></nav></div></header><main><div class=statusbox><span class=icon>&#128994;</span><span class=label>Status<div class=v id=status>Connecting...</div></div><section class=grid><div class="card c-hash"><span class=icon>&#9889;</span><span class=label>Hashrate<div class=v id=hash>0 H/s</div></div><div class="card"><span class=icon>&#127919;</span><span class=label>Pool difficulty<div class=v id=poolDifficulty>waiting</div></div><div class="card"><span class=icon>&#128196;</span><span class=label>Templates<div class=v id=templates>0</div></div><div class="card c-share"><span class=icon>&#128200;</span><span class=label>Shares<div class=v id=shares>0 / 0</div></div><div class="card c-block"><span class=icon>&#127881;</span><span class=label>Blocks<div class=v id=blocks>0</div></div><div class="card wide"><span class=icon>&#127760;</span><span class=label>Pool URL<div class=v id=pool>offline</div></div><div class="card wide"><span class=icon>&#128273;</span><span class=label>Mining address<div class=v id=wallet>not configured</div></div><div class="card"><span class=icon>&#127777;</span><span class=label>Chip temperature<div class=v id=temperature>waiting</div></div><div class="card"><span class=icon>&#9201;</span><span class=label>Uptime<div class=v id=uptime>waiting</div></div><div class="card"><span class=icon>&#128190;</span><span class=label>Free memory<div class=v id=freeHeap>waiting</div></div><div class="card"><span class=icon>&#128200;</span><span class=label>Minimum memory<div class=v id=minFreeHeap>waiting</div></div><div class="card"><span class=icon>&#9881;</span><span class=label>CPU frequency<div class=v id=cpuMHz>waiting</div></div></section><section class=chartbox><h3>Hashrate over time</h3><small>Each point is one dashboard update (every 10 seconds). Higher bars mean more hashes per second.</small><canvas id=hashchart width=900 height=170></canvas></section><section class=chartbox><h3>Accepted shares over time</h3><small>This is a cumulative view: the line rises when the pool accepts a share. Rejected shares are shown in the Shares card.</small><canvas id=sharechart width=900 height=170></canvas></section><section class=chartbox><h3>Chip temperature over time</h3><small>Temperature in degrees Celsius, sampled every 10 seconds. A rising value indicates the board is getting warmer.</small><canvas id=tempchart width=900 height=170></canvas></section><section class=chartbox><h3>Free memory over time</h3><small>Available heap memory in kilobytes, sampled every 10 seconds. A falling value can indicate increasing memory pressure.</small><canvas id=memchart width=900 height=170></canvas></section></main><footer class=bottombar><div class=barinner><span>Repository: <a href='https://github.com/valerio-vaccaro/EasyMiner'>EasyMiner</a></span><span>•</span><span>License: GPL-3.0</span><span>Version: %VERSION%</span></div></footer><script>const q=x=>document.getElementById(x),hc=q('hashchart'),sc=q('sharechart'),tc=q('tempchart'),mc=q('memchart'),hh=[],ss=[],tt=[],mm=[];let previousAccepted=null,previousRejected=null;function shareRain(ok){let box=document.createElement('div');box.className='rain';let icons=ok?['\u{1F389}','\u{1F38A}','\u{1F973}','\u{1F44D}','\u{1F31F}','\u{1F4B0}','\u{1F680}']:['\u{1F4A5}','\u{274C}','\u{1F6AB}','\u{1F625}','\u{1F494}','\u{26A0}','\u{1F480}'];for(let i=0;i<18;i++){let d=document.createElement('span');d.className='drop';d.textContent=icons[Math.floor(Math.random()*icons.length)];d.style.left=(Math.random()*96)+'%';d.style.animationDelay=(Math.random()*.35)+'s';d.style.fontSize=(1.2+Math.random()*1.2)+'rem';box.appendChild(d)}document.body.appendChild(box);setTimeout(()=>box.remove(),2300)}function draw(c,a,color){let x=c.getContext('2d');x.clearRect(0,0,c.width,c.height);let pad=46,bottom=22,plotW=c.width-pad,plotH=c.height-bottom,m=Math.max(...a,1);x.font='12px sans-serif';x.textAlign='right';x.textBaseline='middle';for(let i=0;i<=4;i++){let value=m*(1-i/4),y=i*plotH/4;x.strokeStyle='rgba(155,168,184,.22)';x.lineWidth=1;x.beginPath();x.moveTo(pad,y);x.lineTo(c.width,y);x.stroke();x.fillStyle='#9ba8b8';x.fillText(value>=1000?(value/1000).toFixed(1)+'k':value.toFixed(value<10?1:0),pad-6,y)}x.textAlign='left';x.textBaseline='top';x.fillText('0',pad,plotH+4);x.textAlign='right';x.fillText((a.length*10)+'s',c.width,plotH+4);if(a.length<2)return;x.strokeStyle=color;x.lineWidth=3;x.beginPath();a.forEach((v,i)=>{let px=pad+i*plotW/59,py=plotH-v/m*plotH*.85;i?x.lineTo(px,py):x.moveTo(px,py)});x.stroke()}function show(x){let s=x.stats||x;if(previousAccepted!==null&&s.accepted>previousAccepted)shareRain(true);if(previousRejected!==null&&s.rejected>previousRejected)shareRain(false);previousAccepted=s.accepted;previousRejected=s.rejected;q('hash').textContent=(s.hashrate/1000).toFixed(1)+' kH/s';q('shares').textContent=s.accepted+' / '+s.rejected;q('templates').textContent=s.templates;q('blocks').textContent=s.blocks;tt.push(s.chipTemperature||0);mm.push((s.freeHeap||0)/1024);q('pool').textContent=s.pool||'offline';q('wallet').textContent=s.wallet||'not configured';q('poolDifficulty').textContent=s.poolDifficulty>0?s.poolDifficulty.toFixed(6):'waiting';q('temperature').textContent=(typeof s.chipTemperature==='number'&&s.chipTemperature>-40)?s.chipTemperature.toFixed(1)+' '+String.fromCharCode(176)+'C':'waiting';q('uptime').textContent=(s.uptimeSeconds||0)>0?Math.floor(s.uptimeSeconds/86400)+'d '+Math.floor(s.uptimeSeconds%86400/3600)+'h '+Math.floor(s.uptimeSeconds%3600/60)+'m':'waiting';q('freeHeap').textContent=s.freeHeap?Math.round(s.freeHeap/1024)+' KB':'waiting';q('minFreeHeap').textContent=s.minFreeHeap?Math.round(s.minFreeHeap/1024)+' KB':'waiting';q('cpuMHz').textContent=s.cpuMHz?s.cpuMHz+' MHz':'waiting';q('status').textContent=s.mining?'Mining':'Waiting';hh.push(s.hashrate||0);ss.push(s.accepted||0);if(hh.length>60){hh.shift();ss.shift();tt.shift();mm.shift()}draw(hc,hh,'#f7931a');draw(sc,ss,'#55c2ff');draw(tc,tt,'#63e6be');draw(mc,mm,'#55c2ff')}let w=new WebSocket('ws://'+location.hostname+':81/');w.onmessage=e=>show(JSON.parse(e.data));w.onopen=()=>q('status').textContent='Live';w.onclose=()=>q('status').textContent='HTTP fallback';setInterval(()=>fetch('/api/stats').then(r=>r.json()).then(show).catch(()=>{}),10000);</script></body></html>)HTML";
+// Chrome opens several HTTP connections together for styles, scripts, images,
+// and speculative requests. The Arduino server's default queue holds only four.
+class DashboardServer : public WebServer {
+public:
+    DashboardServer() : WebServer(80) {
+        _server = WiFiServer(80, 8);
+    }
 
-static const char BLOX_TOPBAR[] PROGMEM = "<header class=topbar><div class=barinner><span class=brand>EasyMiner</span><span class=live>LIVE</span><nav class=topnav><a href=\"/\">Home</a><a href=\"/config\">Configuration</a><a href=\"/about\">About</a></nav></div></header>";
+protected:
+    // WiFiClient::write can return a partial write. Send bounded pieces and
+    // yield between them instead of silently truncating a large response.
+    size_t _currentClientWrite(const char *data, size_t length) override {
+        size_t sent = 0;
+        uint32_t deadline = millis() + 10000;
+        while (sent < length && _currentClient.connected()) {
+            const size_t chunk = min(size_t(1024), length - sent);
+            const size_t written = _currentClient.write(data + sent, chunk);
+            if (written > 0) {
+                sent += written;
+                deadline = millis() + 10000;
+            } else if (int32_t(millis() - deadline) >= 0) {
+                break;
+            }
+            delay(1);
+        }
+        return sent;
+    }
 
-static String applyBloxBranding(String p) {
-#ifndef BLOX_VARIANT
-    return p;
-#else
-    p.replace("<title>EasyMiner", "<title>MINER");
-    p.replace("#f7931a", "#c7f36b");
-    p.replace("rgba(247,147,26", "rgba(199,243,107");
-    String aboutTopbar(BLOX_TOPBAR);
-    String escapedAboutTopbar = "<header class=topbar><div class=barinner><span class=brand>EasyMiner</span><span class=live>LIVE</span><nav class=topnav><a href=\\\"/\\\">Home</a><a href=\\\"/config\\\">Configuration</a><a href=\\\"/about\\\">About</a></nav></div></header>";
-    p.replace("<header class=topbar><div class=barinner><span class=brand>EasyMiner</span><span class=live>LIVE</span><nav class=topnav><a href=/>Home</a><a href=/config>Configuration</a><a href=/about>About</a></nav></div></header>", aboutTopbar);
-    p.replace("<header class=topbar><div class=barinner><span class=brand>EasyMiner</span><span class=live>LIVE</span><nav class=topnav><a href=\"/\">Home</a><a href=\"/config\">Configuration</a><a href=\"/about\">About</a></nav></div></header>", aboutTopbar);
-    p.replace(escapedAboutTopbar, aboutTopbar);
-    String logo = String("<img class=blox-logo style=\"display:block;height:34px;width:auto;max-width:150px;object-fit:contain;background:#fff;border-radius:3px;flex:0 0 auto\" src=\"data:image/png;base64,") + BLOX_LOGO_DATA + "\" alt=\"BLOX logo\">";
-    p.replace("<span class=brand>EasyMiner</span>", String("<span class=brand>") + logo + "MINER</span>");
-#if 0
-    String brandingStyle = String("<style>.brand{display:flex;align-items:center;gap:8px;text-transform:uppercase;letter-spacing:2px;color:#000}.blox-logo{height:30px;width:auto;max-width:180px;object-fit:contain;background:#fff;border-radius:3px}.topbar{background:#fff;color:#000;border-bottom-color:#000}.topnav a{background:#000;color:#fff}.live{color:#000;border-color:#000}.card,.chartbox{background:#000;color:#fff;border-color:#000}.card .v,h1,.chartbox h3{color:#fff}.label,small{color:#ddd}a,button{background:#000;color:#fff}.card:before{background:linear-gradient(120deg,rgba(255,255,255,.16),transparent 45%)}body{background:#fff;color:#000}body:before{content:\"\";position:fixed;inset:0;background-image:url(data:image/png;base64,") + BLOX_BACKGROUND_DATA + ");background-repeat:repeat;background-size:220px auto;opacity:.06;animation:bloxFloat 28s linear infinite;pointer-events:none;z-index:0}@keyframes bloxFloat{from{background-position:0 0;transform:rotate(-2deg) scale(1)}50%{background-position:110px 80px;transform:rotate(2deg) scale(1.04)}to{background-position:220px 160px;transform:rotate(-2deg) scale(1)}}body>header,body>main,body>footer{position:relative;z-index:1}");
-#endif
- #if 0
-    String brandingStyle = String("<style>.brand{display:flex;align-items:center;gap:8px;text-transform:uppercase;letter-spacing:2px;color:#000}.blox-logo{height:30px;width:auto;max-width:180px;object-fit:contain;background:#fff;border-radius:3px}.blox-footer-logo{height:18px;width:auto;max-width:100px;object-fit:contain;background:#fff;vertical-align:middle}.footer-brand{display:inline-flex;align-items:center;gap:6px;font-weight:700;text-transform:uppercase;letter-spacing:1px}.topbar{background:#fff;color:#000}.bottombar{background:#000;color:#fff;border-top-color:#000}.topnav a{background:#000;color:#fff}.live{color:#000;border-color:#000}.card,.chartbox{background:#000;color:#fff}.card .v,h1,.chartbox h3{color:#fff}.label,small{color:#ddd}a,button{background:#000;color:#fff}.btc-bg{display:none}body{background:#fff;color:#000}body:before{content:'';position:fixed;inset:0;background-image:url(data:image/png;base64,")
-        + BLOX_BACKGROUND_DATA
-        + String(");background-repeat:repeat;background-size:220px auto;opacity:.06;animation:bloxFloat 28s linear infinite;pointer-events:none;z-index:0}@keyframes bloxFloat{from{background-position:0 0}50%{background-position:110px 80px}to{background-position:220px 160px}}body>header,body>main,body>footer{position:relative;z-index:1}</style>");
- #endif
-    // Add one complete, valid override style after the page's original CSS.
-    String backgroundLogo = String("<img class=blox-bg-logo style=\"position:absolute;top:-20%;left:0;width:180px;height:auto;max-width:none;opacity:.9;animation:bloxFly 24s linear infinite;transform-origin:center\" src=\"data:image/png;base64,") + BLOX_LOGO_DATA + "\" alt=\"\">";
-    p.replace("<div class=btc-bg aria-hidden=true>", String("<div class=btc-bg aria-hidden=true>") + backgroundLogo);
-    String pageStyle = String("<style>.topbar{position:fixed;left:0;right:0;top:0;z-index:10;background:#171e27;color:#fff;border-bottom:1px solid #2d3745;box-shadow:0 4px 18px rgba(0,0,0,.3)}.barinner{max-width:1100px;margin:auto;min-height:58px;padding:0 20px;display:flex;align-items:center;gap:14px;box-sizing:border-box}.brand{display:flex;align-items:center;gap:10px;min-width:0;color:#fff;font-size:20px;font-weight:800;letter-spacing:.4px}.blox-logo{display:block;height:34px;width:auto;max-width:150px;object-fit:contain;background:#fff;border-radius:3px;flex:0 0 auto}.live{display:inline-block;color:#63e6be;border:1px solid #2d8d73;border-radius:20px;padding:3px 9px;font-size:11px;letter-spacing:1px;animation:blink 1.5s infinite}.topnav{margin-left:auto;display:flex;gap:8px}.topnav a{padding:8px 11px;background:#c7f36b;color:#101318;border-radius:5px;text-decoration:none;font-weight:bold}.btc-bg{display:block;position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:-1;opacity:.16}.btc-bg span{display:none}.blox-bg-logo{position:absolute;top:-20%;left:0;width:180px;height:auto;opacity:.9;animation:bloxFly 24s linear infinite;transform-origin:center}@keyframes bloxFly{0%{transform:translate3d(-20vw,0,0) rotate(-2deg) scale(1)}50%{transform:translate3d(55vw,55vh,0) rotate(2deg) scale(1.03)}100%{transform:translate3d(115vw,110vh,0) rotate(-2deg) scale(1)}}@keyframes bloxFlyReverse{0%{transform:translate3d(115vw,110vh,0) rotate(2deg) scale(1.02)}50%{transform:translate3d(35vw,45vh,0) rotate(-3deg) scale(1.05)}100%{transform:translate3d(-20vw,-20vh,0) rotate(2deg) scale(.98)}}@keyframes bloxFlySide{0%{transform:translate3d(110vw,20vh,0) rotate(8deg) scale(.9)}50%{transform:translate3d(45vw,70vh,0) rotate(-4deg) scale(1.08)}100%{transform:translate3d(-25vw,35vh,0) rotate(6deg) scale(1)}}@media(max-width:700px){.brand{gap:6px}.blox-logo{height:28px;max-width:110px}.blox-bg-logo{width:120px}.topnav{gap:4px}.topnav a{padding:7px 6px;font-size:12px}}</style>");
-    p.replace("</head>", pageStyle + "</head>");
-    String backgroundScript = "<script>(function(){var box=document.querySelector('.btc-bg'),base=document.querySelector('.blox-bg-logo');if(!box||!base)return;var paths=['bloxFly','bloxFlyReverse','bloxFlySide'];for(var i=0;i<18;i++){var mark=base.cloneNode(true);mark.style.top=(Math.random()*95-20)+'%';mark.style.left=(Math.random()*100)+'%';mark.style.width=(70+Math.random()*160)+'px';mark.style.opacity=(0.16+Math.random()*0.68).toFixed(2);mark.style.animationName=paths[Math.floor(Math.random()*paths.length)];mark.style.animationDuration=(14+Math.random()*30)+'s';mark.style.animationDelay=(-Math.random()*40)+'s';box.appendChild(mark)}})();</script>";
-    p.replace("</body>", backgroundScript + "</body>");
-    return p;
-#endif
-}
+    size_t _currentClientWrite_P(PGM_P data, size_t length) override {
+        // ESP32 flash is memory-mapped; the same bounded writer works for both.
+        return _currentClientWrite(data, length);
+    }
+};
 
-static String applyOfficineBitcoinBranding(String p) {
-#ifndef OFFICINE_BITCOIN_VARIANT
-    return p;
-#else
-    p.reserve(p.length() + 20000);
-    p.replace("EasyMiner", "OfficineBitcoinMiner");
-    p.replace("#f7931a", "#ffd21f");
-    p.replace("rgba(247,147,26", "rgba(255,210,31");
-    String logo = String("<img class=officine-logo style=\"display:block;height:34px;width:auto;max-width:150px;object-fit:contain;background:#fff;border-radius:3px;flex:0 0 auto\" src=\"data:image/png;base64,") + OFFICINE_BITCOIN_LOGO_DATA + "\" alt=\"OfficineBitcoin logo\">";
-    p.replace("<span class=brand>OfficineBitcoinMiner</span>", String("<span class=brand>") + logo + "OfficineBitcoinMiner</span>");
-    p.replace("<div class=btc-bg aria-hidden=true>", String("<div class=btc-bg aria-hidden=true><img class=officine-bg-logo style=\"position:absolute;top:-20%;left:0;width:180px;height:auto;max-width:none;opacity:.9;animation:officineFly 24s linear infinite;transform-origin:center\" src=\"data:image/png;base64,") + OFFICINE_BITCOIN_LOGO_DATA + "\" alt=\"\">");
-    String style = String("<style>body{background:#15181d;color:#f3f4f6}.topbar{background:#24282e;color:#fff;border-bottom:1px solid #ffd21f}.brand{display:flex;align-items:center;gap:10px;color:#fff}.officine-logo{height:34px;max-width:150px}.live{color:#ffe98a;border-color:#88751a}.topnav a,a,button{background:#ffd21f;color:#17191d}.card,.chartbox{background:#24282e;border-color:#454b55}.card .v,h1,.chartbox h3{color:#ffd21f}.card:before{background:linear-gradient(120deg,rgba(255,210,31,.14),transparent 45%)}.card:hover{border-color:#ffd21f;box-shadow:0 12px 30px rgba(255,210,31,.2)}.btc-bg{display:block;z-index:0;opacity:.16}.btc-bg span{display:none}.officine-bg-logo{position:absolute;top:-20%;left:0;width:180px;height:auto;opacity:.9;animation:officineFly 24s linear infinite;transform-origin:center}body>header,body>main,body>footer{position:relative;z-index:1}@keyframes officineFly{0%{transform:translate3d(-20vw,0,0) rotate(-2deg) scale(1)}50%{transform:translate3d(55vw,55vh,0) rotate(2deg) scale(1.03)}100%{transform:translate3d(115vw,110vh,0) rotate(-2deg) scale(1)}}@keyframes officineFlyReverse{0%{transform:translate3d(115vw,110vh,0) rotate(2deg)}50%{transform:translate3d(35vw,45vh,0) rotate(-3deg) scale(1.05)}100%{transform:translate3d(-20vw,-20vh,0) rotate(2deg)}}@media(max-width:700px){.brand{gap:6px}.officine-logo{height:28px;max-width:110px}.officine-bg-logo{width:120px}}</style>");
-    p.replace("</head>", style + "</head>");
-    String script = "<script>(function(){var box=document.querySelector('.btc-bg'),base=document.querySelector('.officine-bg-logo');if(!box||!base)return;for(var i=0;i<18;i++){var mark=base.cloneNode(true);mark.style.top=(Math.random()*95-20)+'%';mark.style.left=(Math.random()*100)+'%';mark.style.width=(70+Math.random()*160)+'px';mark.style.opacity=(0.12+Math.random()*0.42).toFixed(2);mark.style.animationName=Math.random()<.5?'officineFly':'officineFlyReverse';mark.style.animationDuration=(14+Math.random()*30)+'s';mark.style.animationDelay=(-Math.random()*40)+'s';box.appendChild(mark)}})();</script>";
-    p.replace("</body>", script + "</body>");
-    return p;
-#endif
-}
+DashboardServer server;
+WebSocketsServer socket(81);
+uint32_t statsLedOffAt = 0;
 
-static String applySatoshiSpritzBranding(String p) {
-#ifndef SATOSHI_SPRITZ_VARIANT
-    return p;
-#else
-    p.reserve(p.length() + 20000);
-    p.replace("EasyMiner", "SatoshiSpritzMiner");
-    p.replace("#f7931a", "#ff9f1c");
-    p.replace("rgba(247,147,26", "rgba(255,159,28");
-    String logo = String("<img class=satoshi-logo style=\"display:block;height:34px;width:auto;max-width:150px;object-fit:contain;background:#171717;border-radius:3px;flex:0 0 auto\" src=\"data:image/png;base64,") + SATOSHI_SPRITZ_LOGO_DATA + "\" alt=\"Satoshi Spritz logo\">";
-    p.replace("<span class=brand>SatoshiSpritzMiner</span>", String("<span class=brand>") + logo + "SatoshiSpritzMiner</span>");
-    p.replace("<div class=btc-bg aria-hidden=true>", String("<div class=btc-bg aria-hidden=true><img class=satoshi-bg-logo style=\"position:absolute;top:-20%;left:0;width:180px;height:auto;max-width:none;opacity:.9;animation:satoshiFly 24s linear infinite;transform-origin:center\" src=\"data:image/png;base64,") + SATOSHI_SPRITZ_LOGO_DATA + "\" alt=\"\">");
-    String style = String("<style>.topbar{background:#171717;color:#fff;border-bottom:1px solid #ff9f1c}.brand{display:flex;align-items:center;gap:10px;color:#fff}.satoshi-logo{height:34px;max-width:150px}.live{color:#ffd27a;border-color:#9a6216}.topnav a,a,button{background:#ff9f1c;color:#171717}.card,.chartbox{border-color:#5c4320}.card .v,h1,.chartbox h3{color:#ff9f1c}.card:before{background:linear-gradient(120deg,rgba(255,159,28,.14),transparent 45%)}.card:hover{border-color:#ff9f1c;box-shadow:0 12px 30px rgba(255,159,28,.2)}.btc-bg{display:block;z-index:0;opacity:.16}.btc-bg span{display:none}.satoshi-bg-logo{position:absolute;top:-20%;left:0;width:180px;height:auto;opacity:.9;animation:satoshiFly 24s linear infinite;transform-origin:center}body>header,body>main,body>footer{position:relative;z-index:1}@keyframes satoshiFly{0%{transform:translate3d(-20vw,0,0) rotate(-2deg) scale(1)}50%{transform:translate3d(55vw,55vh,0) rotate(2deg) scale(1.03)}100%{transform:translate3d(115vw,110vh,0) rotate(-2deg) scale(1)}}@keyframes satoshiFlyReverse{0%{transform:translate3d(115vw,110vh,0) rotate(2deg)}50%{transform:translate3d(35vw,45vh,0) rotate(-3deg) scale(1.05)}100%{transform:translate3d(-20vw,-20vh,0) rotate(2deg)}}@media(max-width:700px){.brand{gap:6px}.satoshi-logo{height:28px;max-width:110px}.satoshi-bg-logo{width:120px}}</style>");
-    p.replace("</head>", style + "</head>");
-    String script = "<script>(function(){var box=document.querySelector('.btc-bg'),base=document.querySelector('.satoshi-bg-logo');if(!box||!base)return;for(var i=0;i<18;i++){var mark=base.cloneNode(true);mark.style.top=(Math.random()*95-20)+'%';mark.style.left=(Math.random()*100)+'%';mark.style.width=(70+Math.random()*160)+'px';mark.style.opacity=(0.12+Math.random()*0.42).toFixed(2);mark.style.animationName=Math.random()<.5?'satoshiFly':'satoshiFlyReverse';mark.style.animationDuration=(14+Math.random()*30)+'s';mark.style.animationDelay=(-Math.random()*40)+'s';box.appendChild(mark)}})();</script>";
-    p.replace("</body>", script + "</body>");
-    return p;
-#endif
-}
+// Branding affects only the title, logo, and palette. Layout and behavior are
+// shared, and the repository attribution always names the EasyMiner project.
+struct Brand {
+    const char *id;
+    const char *name;
+    const char *theme;
+    bool hasLogo;
+};
 
-static String applyBranding(String p) {
-    // Keep the repository attribution static and independent from branding.
-    // Protect it while variant names are substituted in page text.
-    static const char REPOSITORY_URL[] = "https://github.com/valerio-vaccaro/EasyMiner";
-    static const char REPOSITORY_TOKEN[] = "__EASYMINER_REPOSITORY_URL__";
-    static const char REPOSITORY_LABEL_TOKEN[] = "__EASYMINER_REPOSITORY_LABEL__";
-    p.replace(REPOSITORY_URL, REPOSITORY_TOKEN);
-    p.replace(">EasyMiner</a>", ">__EASYMINER_REPOSITORY_LABEL__</a>");
-#if defined(SATOSHI_SPRITZ_VARIANT)
-    p = applySatoshiSpritzBranding(p);
+#if defined(BLOX_VARIANT)
+const Brand brand = {"blox", "BLOXMiner",
+    "--accent:#c7f36b;--accent-rgb:199,243,107;--button:#c7f36b;--button-text:#101318;", true};
+#elif defined(SATOSHI_SPRITZ_VARIANT)
+const Brand brand = {"satoshispritz", "SatoshiSpritzMiner",
+    "--accent:#ff9f1c;--accent-rgb:255,159,28;--button:#ff9f1c;--button-text:#171717;", true};
 #elif defined(OFFICINE_BITCOIN_VARIANT)
-    p = applyOfficineBitcoinBranding(p);
+const Brand brand = {"officinebitcoin", "OfficineBitcoinMiner",
+    "--accent:#ffd21f;--accent-rgb:255,210,31;--button:#ffd21f;--button-text:#17191d;--surface:#24282e;--border:#454b55;", true};
+#elif defined(SBAMMINER_VARIANT)
+const Brand brand = {"sbamminer", "SBAMminer",
+    "--accent:#60a5fa;--accent-rgb:96,165,250;--button:#1e40af;--button-text:#ffffff;", true};
 #else
-    p = applyBloxBranding(p);
+const Brand brand = {"base", "EasyMiner",
+    "--accent:#f7931a;--accent-rgb:247,147,26;--button:#f7931a;--button-text:#101318;", false};
 #endif
-    p.replace(REPOSITORY_TOKEN, REPOSITORY_URL);
-    p.replace(REPOSITORY_LABEL_TOKEN, "EasyMiner");
-    p.replace("setPool('solo.homeminingitalia.org',3333)", "setPool('solo.homeminingitalia.org',3340)");
-    return p;
+
+struct TemplateValue {
+    const char *name;
+    String value;
+};
+
+// Substitute only tokens in the original template. A saved setting containing
+// "%BRAND%" or another token must stay literal, rather than being substituted.
+String fillTemplate(const char *source, const TemplateValue *values, size_t count) {
+    String output;
+    output.reserve(strlen(source) + 512);
+    const char *cursor = source;
+    while (*cursor) {
+        const char *start = strchr(cursor, '%');
+        if (!start) {
+            output += cursor;
+            break;
+        }
+        output.concat(cursor, start - cursor);
+        const char *end = strchr(start + 1, '%');
+        if (!end) {
+            output += start;
+            break;
+        }
+        bool found = false;
+        for (size_t i = 0; i < count; ++i) {
+            const size_t length = strlen(values[i].name);
+            if (length == size_t(end - start - 1) && strncmp(start + 1, values[i].name, length) == 0) {
+                output += values[i].value;
+                found = true;
+                break;
+            }
+        }
+        if (!found) output.concat(start, end - start + 1);
+        cursor = end + 1;
+    }
+    return output;
 }
 
-static String pageWithVersion() { String p(PAGE); p.replace("%VERSION%", AUTO_VERSION); return applyBranding(p); }
+template<size_t N>
+String fillTemplate(const char *source, const TemplateValue (&values)[N]) {
+    return fillTemplate(source, values, N);
+}
 
-static String statsJson() {
-    mining_stats_t *m = miner_get_stats();
-    StaticJsonDocument<1536> d; JsonObject s=d["stats"].to<JsonObject>();
-    unsigned long elapsed = millis() - m->startTime;
-    if (elapsed == 0) elapsed = 1;
-    s["uptimeSeconds"]=elapsed/1000; s["hashrate"]=(uint32_t)((double)m->hashes*1000.0/elapsed);
-    if (!hardwareStatsReady || millis() - hardwareStatsUpdatedAt >= 120000) updateHardwareStats();
-    s["chipTemperature"]=cachedTemperature; s["freeHeap"]=cachedFreeHeap; s["minFreeHeap"]=cachedMinFreeHeap; s["heapSize"]=cachedHeapSize; s["cpuMHz"]=cachedCpuMHz; s["hashes"]=(uint64_t)m->hashes; s["shares"]=m->shares; s["accepted"]=m->accepted; s["rejected"]=m->rejected; s["blocks"]=m->blocks; s["templates"]=m->templates; s["bestDifficulty"]=m->bestDifficulty; s["latency"]=m->avgLatency;
-    s["poolConnected"]=stratum_is_connected(); s["poolDifficulty"]=miner_get_difficulty(); s["pool"]=stratum_get_pool(); s["poolName"]=stratum_get_pool(); s["mining"]=miner_is_running(); s["core0Active"]=miner_core0_is_active(); s["core1Active"]=miner_core1_is_active(); s["ip"]=wifi_manager_get_ip(); s["rssi"]=WiFi.RSSI(); s["wallet"]=nvs_config_get()->wallet;
-    s["flashSize"]=ESP.getFlashChipSize();
-    String out; serializeJson(d,out); return out;
+String escapeHtml(const char *text) {
+    String escaped;
+    for (const char *cursor = text; *cursor; ++cursor) {
+        switch (*cursor) {
+            case '&': escaped += "&amp;"; break;
+            case '<': escaped += "&lt;"; break;
+            case '>': escaped += "&gt;"; break;
+            case '"': escaped += "&quot;"; break;
+            case '\'': escaped += "&#39;"; break;
+            default: escaped += *cursor;
+        }
+    }
+    return escaped;
 }
-static String field(const char *name) { return server.hasArg(name) ? server.arg(name) : String(); }
-static void put(char *dst, size_t size, const String &value) { strncpy(dst, value.c_str(), size - 1); dst[size - 1] = 0; }
-static String configPage() {
-    miner_config_t *c = nvs_config_get();
-    String p = String("<!doctype html><html><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>EasyMiner configuration</title><style>body{margin:0;background:#101318;color:#e7edf5;font:15px system-ui;padding-top:72px;padding-bottom:58px}main{max-width:760px;margin:auto;padding:20px}.topbar,.bottombar{position:fixed;left:0;right:0;z-index:10;background:#171e27;border-color:#2d3745;box-shadow:0 4px 18px rgba(0,0,0,.3)}.topbar{top:0;border-bottom:1px solid}.bottombar{bottom:0;border-top:1px solid}.barinner{max-width:1100px;margin:auto;min-height:58px;padding:0 20px;display:flex;align-items:center;gap:14px;box-sizing:border-box}.brand{font-size:20px;font-weight:800;color:#f7931a;letter-spacing:.4px}.topnav{margin-left:auto;display:flex;gap:8px}.topnav a{padding:8px 11px;background:#f7931a;color:#101318;border-radius:5px;text-decoration:none;font-weight:bold}.live{display:inline-block;color:#63e6be;border:1px solid #2d8d73;border-radius:20px;padding:3px 9px;font-size:11px;letter-spacing:1px;animation:blink 1.5s infinite}.bottombar .barinner{min-height:44px;justify-content:center;color:#9ba8b8;font-size:12px}.bottombar a{background:transparent;color:#f7931a;padding:0}.btc-bg{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:-1}.btc-bg span{position:absolute;color:rgba(247,147,26,.10);font-size:clamp(22px,4vw,54px);font-weight:800;animation:btcFly 22s linear infinite}.btc-bg span:nth-child(2n){animation-name:btcFlyDown;opacity:.06}.btc-bg span:nth-child(3n){animation-duration:29s;opacity:.14}.btc-bg span:nth-child(7){left:14%;animation-name:btcFlyOblique;animation-duration:27s;opacity:.09}.btc-bg span:nth-child(8){left:36%;animation-name:btcFlyObliqueDown;animation-duration:24s;opacity:.13}.btc-bg span:nth-child(9){left:58%;animation-name:btcFlyOblique;animation-duration:30s;opacity:.07}.btc-bg span:nth-child(10){left:79%;animation-name:btcFlyObliqueDown;animation-duration:26s;opacity:.11}.btc-bg span:nth-child(11){left:94%;animation-name:btcFlyOblique;animation-duration:31s;opacity:.06}.btc-bg span:nth-child(12){left:46%;animation-name:btcFlyObliqueDown;animation-duration:28s;opacity:.08}@keyframes btcFlyOblique{from{transform:translate3d(-18vw,110vh,0) rotate(-90deg)}to{transform:translate3d(24vw,-15vh,0) rotate(420deg)}}@keyframes btcFlyObliqueDown{from{transform:translate3d(20vw,-15vh,0) rotate(120deg)}to{transform:translate3d(-24vw,110vh,0) rotate(-300deg)}}@keyframes btcFly{from{transform:translate3d(0,110vh,0) rotate(-20deg)}to{transform:translate3d(70px,-15vh,0) rotate(360deg)}}@keyframes btcFlyDown{from{transform:translate3d(0,-15vh,0) rotate(160deg)}to{transform:translate3d(-70px,110vh,0) rotate(-220deg)}}.panel{background:#1b222c;border:1px solid #2d3745;border-radius:12px;padding:20px;box-shadow:0 10px 28px rgba(0,0,0,.25);animation:rise .55s ease both}.panel h1{margin-top:0;color:#f7931a}.hint{color:#9ba8b8}.fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{display:flex;flex-direction:column;color:#aebbd0}.field input{box-sizing:border-box;width:100%;padding:11px;margin-top:5px;background:#202833;color:#fff;border:1px solid #596575;border-radius:6px;transition:border-color .2s,box-shadow .2s}.field input:focus{outline:0;border-color:#f7931a;box-shadow:0 0 12px rgba(247,147,26,.25)}.core-options{grid-column:auto;display:flex;align-items:center;gap:16px;padding:10px 0;color:#aebbd0}.core-options input{width:auto;margin:0 5px 0 0;accent-color:#f7931a}.separator{border:0;border-top:1px solid #3a4655;margin:20px 0 4px}.poolpresets{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}.poolpresets button{padding:8px 10px;background:#263445;color:#e7edf5;border:1px solid #476078;border-radius:6px;cursor:pointer;transition:background .2s,transform .2s}.poolpresets button:hover{background:#35516b;transform:translateY(-2px)}.actions{display:flex;gap:10px;margin-top:18px}.actions form,.actions button{flex:1}.actions button{width:100%;padding:11px;background:#f7931a;color:#111;border:0;border-radius:6px;font-weight:bold;cursor:pointer;transition:transform .2s,box-shadow .2s}.actions button:hover{transform:translateY(-2px);box-shadow:0 8px 18px rgba(247,147,26,.25)}.danger{background:#e05252!important;color:#fff!important}@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}@keyframes blink{50%{opacity:.45}}@media(max-width:700px){.fields{grid-template-columns:1fr}.actions{flex-direction:column}}</style></head><body><div class=btc-bg aria-hidden=true><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span style='left:5%;animation-name:btcFlyOblique;animation-duration:23s;animation-delay:-0s;opacity:.5'>&#8383;</span><span style='left:13%;animation-name:btcFlyObliqueDown;animation-duration:24s;animation-delay:-4s;opacity:.6'>&#8383;</span><span style='left:21%;animation-name:btcFlyOblique;animation-duration:25s;animation-delay:-8s;opacity:.7'>&#8383;</span><span style='left:29%;animation-name:btcFlyObliqueDown;animation-duration:26s;animation-delay:-12s;opacity:.8'>&#8383;</span><span style='left:37%;animation-name:btcFlyOblique;animation-duration:27s;animation-delay:-16s;opacity:.9'>&#8383;</span><span style='left:45%;animation-name:btcFlyObliqueDown;animation-duration:28s;animation-delay:-20s;opacity:.5'>&#8383;</span><span style='left:53%;animation-name:btcFlyOblique;animation-duration:23s;animation-delay:-0s;opacity:.6'>&#8383;</span><span style='left:61%;animation-name:btcFlyObliqueDown;animation-duration:24s;animation-delay:-4s;opacity:.7'>&#8383;</span><span style='left:69%;animation-name:btcFlyOblique;animation-duration:25s;animation-delay:-8s;opacity:.8'>&#8383;</span><span style='left:77%;animation-name:btcFlyObliqueDown;animation-duration:26s;animation-delay:-12s;opacity:.9'>&#8383;</span><span style='left:85%;animation-name:btcFlyOblique;animation-duration:27s;animation-delay:-16s;opacity:.5'>&#8383;</span><span style='left:93%;animation-name:btcFlyObliqueDown;animation-duration:28s;animation-delay:-20s;opacity:.6'>&#8383;</span><span style='left:6%;animation-name:btcFlyOblique;animation-duration:21s;animation-delay:0s;opacity:0.045'>&#8383;</span><span style='left:12%;animation-name:btcFlyDown;animation-duration:22s;animation-delay:-4s;opacity:0.075'>&#8383;</span><span style='left:18%;animation-name:btcFly;animation-duration:23s;animation-delay:-8s;opacity:0.11'>&#8383;</span><span style='left:24%;animation-name:btcFlyDown;animation-duration:24s;animation-delay:-12s;opacity:0.16'>&#8383;</span><span style='left:30%;animation-name:btcFly;animation-duration:25s;animation-delay:-16s;opacity:0.22'>&#8383;</span><span style='left:36%;animation-name:btcFlyDown;animation-duration:26s;animation-delay:-20s;opacity:0.08'>&#8383;</span><span style='left:42%;animation-name:btcFlyOblique;animation-duration:27s;animation-delay:-24s;opacity:0.045'>&#8383;</span><span style='left:48%;animation-name:btcFlyDown;animation-duration:21s;animation-delay:-28s;opacity:0.075'>&#8383;</span><span style='left:54%;animation-name:btcFly;animation-duration:22s;animation-delay:-32s;opacity:0.11'>&#8383;</span><span style='left:60%;animation-name:btcFlyDown;animation-duration:23s;animation-delay:-36s;opacity:0.16'>&#8383;</span><span style='left:66%;animation-name:btcFly;animation-duration:24s;animation-delay:-40s;opacity:0.22'>&#8383;</span><span style='left:72%;animation-name:btcFlyDown;animation-duration:25s;animation-delay:-44s;opacity:0.08'>&#8383;</span><span style='left:78%;animation-name:btcFlyOblique;animation-duration:26s;animation-delay:-48s;opacity:0.045'>&#8383;</span><span style='left:84%;animation-name:btcFlyDown;animation-duration:27s;animation-delay:-52s;opacity:0.075'>&#8383;</span><span style='left:90%;animation-name:btcFly;animation-duration:21s;animation-delay:-56s;opacity:0.11'>&#8383;</span><span style='left:96%;animation-name:btcFlyDown;animation-duration:22s;animation-delay:-60s;opacity:0.16'>&#8383;</span><span style='left:4%;animation-name:btcFlyOblique;animation-duration:19s;animation-delay:0s;color:#f7931a;opacity:0.32'>&#8383;</span><span style='left:12%;animation-name:btcFlyDown;animation-duration:20s;animation-delay:-4s;color:#080b10;opacity:0.42'>&#8383;</span><span style='left:20%;animation-name:btcFly;animation-duration:21s;animation-delay:-8s;color:#252d38;opacity:0.5'>&#8383;</span><span style='left:28%;animation-name:btcFlyDown;animation-duration:22s;animation-delay:-12s;color:#f7931a;opacity:0.32'>&#8383;</span><span style='left:36%;animation-name:btcFlyOblique;animation-duration:23s;animation-delay:-16s;color:#080b10;opacity:0.42'>&#8383;</span><span style='left:44%;animation-name:btcFlyDown;animation-duration:24s;animation-delay:-20s;color:#252d38;opacity:0.5'>&#8383;</span><span style='left:52%;animation-name:btcFly;animation-duration:19s;animation-delay:-24s;color:#f7931a;opacity:0.32'>&#8383;</span><span style='left:60%;animation-name:btcFlyDown;animation-duration:20s;animation-delay:-28s;color:#080b10;opacity:0.42'>&#8383;</span><span style='left:68%;animation-name:btcFlyOblique;animation-duration:21s;animation-delay:-32s;color:#252d38;opacity:0.5'>&#8383;</span><span style='left:76%;animation-name:btcFlyDown;animation-duration:22s;animation-delay:-36s;color:#f7931a;opacity:0.32'>&#8383;</span><span style='left:84%;animation-name:btcFly;animation-duration:23s;animation-delay:-40s;color:#080b10;opacity:0.42'>&#8383;</span><span style='left:92%;animation-name:btcFlyDown;animation-duration:24s;animation-delay:-44s;color:#252d38;opacity:0.5'>&#8383;</span></div><header class=topbar><div class=barinner><span class=brand>EasyMiner</span><span class=live>LIVE</span><nav class=topnav><a href=/>Home</a><a href=/config>Configuration</a><a href=/about>About</a></nav></div></header><main><section class=panel><h1>&#9881; EasyMiner Configuration</h1><p class=hint>Configure Wi-Fi and mining connection.</p><form id=configForm method=post action=/config><div class=fields><label class=field>&#128246; Wi-Fi SSID<input name=ssid value='");
-    p += c->ssid;
-    p += "'></label><label class=field>&#128274; Wi-Fi password<input name=wifi_password type=password value='";
-    p += c->wifiPassword;
-    p += "'></label><label class=field>&#128273; Mining address<input name=wallet value='";
-    p += c->wallet;
-    p += "'></label><label class=field>&#128100; Worker<input name=worker value='";
-    p += c->workerName;
-    p += "'></label><label class=field>&#127760; Pool host<input name=pool_url value='";
-    p += c->poolUrl;
-    p += "'></label><label class=field>&#128290; Pool port<input name=pool_port value='";
-    p += String(c->poolPort);
-    p += "'></label><div class=core-options><span class=hint>Mining cores:</span><label><input type=checkbox name=core0";
-    p += c->mineOnCore0 ? " checked" : "";
-    p += "> Core 0</label><label><input type=checkbox name=core1";
-    p += c->mineOnCore1 ? " checked" : "";
-    p += "> Core 1</label></div><label class=field>&#128220; Pool password<input name=pool_pass value='";
-    p += c->poolPassword;
-    p += "'></label></div><hr class=separator><div class=poolpresets><span class=hint>Pool selection:</span><button type=button onclick=\"setPool('solo.homeminingitalia.org',3333)\">&#127919; HomeMiningItalia</button><button type=button onclick=\"setPool('public-pool.io',21496)\">&#127760; Public Pool</button><button type=button onclick=\"setPool('pool.bitronics.store',3334)\">&#9889; Bitronics</button><button type=button onclick=\"setPool('solo.ckpool.org',3333)\">&#9935; CKPool</button><button type=button onclick=\"setPool('solo.stratum.braiins.com',3333)\">&#128273; Braiins Solo</button></div></form><div class=actions><button form=configForm type=submit>&#128190; Save and reboot</button><form method=post action=/config/delete><button class=danger>&#128465; Delete configuration</button></form><form method=post action=/reboot><button>&#128260; Reboot</button></form></div></section></main><footer class=bottombar><div class=barinner><span>Repository: <a href='https://github.com/valerio-vaccaro/EasyMiner'>EasyMiner</a></span><span>&bull;</span><span>License: GPL-3.0</span><span>Version: %VERSION%</span></div></footer><script>function setPool(host,port){document.querySelector('[name=pool_url]').value=host;document.querySelector('[name=pool_port]').value=port;}</script></body></html>";
-    return applyBranding(p);
-}
-static String aboutPageRaw();
-static String aboutPage() { return applyBranding(aboutPageRaw()); }
 
-static String aboutPageRaw() {
-    String p = String(R"ABOUT(<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>About EasyMiner</title><style>body{margin:0;background:#101318;color:#e7edf5;font:15px system-ui;padding-top:72px;padding-bottom:58px}main{max-width:900px;margin:auto;padding:20px}.topbar,.bottombar{position:fixed;left:0;right:0;z-index:10;background:#171e27;border-color:#2d3745;box-shadow:0 4px 18px rgba(0,0,0,.3)}.topbar{top:0;border-bottom:1px solid}.bottombar{bottom:0;border-top:1px solid}.barinner{max-width:1100px;margin:auto;min-height:58px;padding:0 20px;display:flex;align-items:center;gap:14px;box-sizing:border-box}.brand{font-size:20px;font-weight:800;color:#f7931a}.topnav{margin-left:auto;display:flex;gap:8px}.topnav a{padding:8px 11px;background:#f7931a;color:#101318;border-radius:5px;text-decoration:none;font-weight:bold}.live{color:#63e6be;border:1px solid #2d8d73;border-radius:20px;padding:3px 9px;font-size:11px;letter-spacing:1px}.bottombar .barinner{min-height:44px;justify-content:center;color:#9ba8b8;font-size:12px}.panel{background:#1b222c;border:1px solid #2d3745;border-radius:12px;padding:22px;margin-bottom:14px;box-shadow:0 10px 28px rgba(0,0,0,.25);animation:rise .5s ease both}.panel h1,.panel h2{color:#f7931a}.panel h1{margin-top:0}.panel h2{font-size:18px}.panel li{margin:8px 0;color:#c4d0df}.muted{color:#9ba8b8}@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}} .btc-bg{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:-1}.btc-bg span{position:absolute;color:rgba(247,147,26,.10);font-size:clamp(22px,4vw,54px);font-weight:800;animation:btcFly 22s linear infinite}.btc-bg span:nth-child(2n){animation-name:btcFlyDown;opacity:.06}.btc-bg span:nth-child(3n){animation-duration:29s;opacity:.14}.btc-bg span:nth-child(7){left:14%;animation-name:btcFlyOblique;animation-duration:27s;opacity:.09}.btc-bg span:nth-child(8){left:36%;animation-name:btcFlyObliqueDown;animation-duration:24s;opacity:.13}.btc-bg span:nth-child(9){left:58%;animation-name:btcFlyOblique;animation-duration:30s;opacity:.07}.btc-bg span:nth-child(10){left:79%;animation-name:btcFlyObliqueDown;animation-duration:26s;opacity:.11}.btc-bg span:nth-child(11){left:94%;animation-name:btcFlyOblique;animation-duration:31s;opacity:.06}.btc-bg span:nth-child(12){left:46%;animation-name:btcFlyObliqueDown;animation-duration:28s;opacity:.08}@keyframes btcFlyOblique{from{transform:translate3d(-18vw,110vh,0) rotate(-90deg)}to{transform:translate3d(24vw,-15vh,0) rotate(420deg)}}@keyframes btcFlyObliqueDown{from{transform:translate3d(20vw,-15vh,0) rotate(120deg)}to{transform:translate3d(-24vw,110vh,0) rotate(-300deg)}}@keyframes btcFly{from{transform:translate3d(0,110vh,0) rotate(-20deg)}to{transform:translate3d(70px,-15vh,0) rotate(360deg)}}@keyframes btcFlyDown{from{transform:translate3d(0,-15vh,0) rotate(160deg)}to{transform:translate3d(-70px,110vh,0) rotate(-220deg)}}</style></head><body><div class=btc-bg aria-hidden=true><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span>&#8383;</span><span style="left:5%;animation-name:btcFlyOblique;animation-duration:23s;animation-delay:-0s;opacity:.5">&#8383;</span><span style="left:13%;animation-name:btcFlyObliqueDown;animation-duration:24s;animation-delay:-4s;opacity:.6">&#8383;</span><span style="left:21%;animation-name:btcFlyOblique;animation-duration:25s;animation-delay:-8s;opacity:.7">&#8383;</span><span style="left:29%;animation-name:btcFlyObliqueDown;animation-duration:26s;animation-delay:-12s;opacity:.8">&#8383;</span><span style="left:37%;animation-name:btcFlyOblique;animation-duration:27s;animation-delay:-16s;opacity:.9">&#8383;</span><span style="left:45%;animation-name:btcFlyObliqueDown;animation-duration:28s;animation-delay:-20s;opacity:.5">&#8383;</span><span style="left:53%;animation-name:btcFlyOblique;animation-duration:23s;animation-delay:-0s;opacity:.6">&#8383;</span><span style="left:61%;animation-name:btcFlyObliqueDown;animation-duration:24s;animation-delay:-4s;opacity:.7">&#8383;</span><span style="left:69%;animation-name:btcFlyOblique;animation-duration:25s;animation-delay:-8s;opacity:.8">&#8383;</span><span style="left:77%;animation-name:btcFlyObliqueDown;animation-duration:26s;animation-delay:-12s;opacity:.9">&#8383;</span><span style="left:85%;animation-name:btcFlyOblique;animation-duration:27s;animation-delay:-16s;opacity:.5">&#8383;</span><span style="left:93%;animation-name:btcFlyObliqueDown;animation-duration:28s;animation-delay:-20s;opacity:.6">&#8383;</span><span style='left:6%;animation-name:btcFlyOblique;animation-duration:21s;animation-delay:0s;opacity:0.045'>&#8383;</span><span style='left:12%;animation-name:btcFlyDown;animation-duration:22s;animation-delay:-4s;opacity:0.075'>&#8383;</span><span style='left:18%;animation-name:btcFly;animation-duration:23s;animation-delay:-8s;opacity:0.11'>&#8383;</span><span style='left:24%;animation-name:btcFlyDown;animation-duration:24s;animation-delay:-12s;opacity:0.16'>&#8383;</span><span style='left:30%;animation-name:btcFly;animation-duration:25s;animation-delay:-16s;opacity:0.22'>&#8383;</span><span style='left:36%;animation-name:btcFlyDown;animation-duration:26s;animation-delay:-20s;opacity:0.08'>&#8383;</span><span style='left:42%;animation-name:btcFlyOblique;animation-duration:27s;animation-delay:-24s;opacity:0.045'>&#8383;</span><span style='left:48%;animation-name:btcFlyDown;animation-duration:21s;animation-delay:-28s;opacity:0.075'>&#8383;</span><span style='left:54%;animation-name:btcFly;animation-duration:22s;animation-delay:-32s;opacity:0.11'>&#8383;</span><span style='left:60%;animation-name:btcFlyDown;animation-duration:23s;animation-delay:-36s;opacity:0.16'>&#8383;</span><span style='left:66%;animation-name:btcFly;animation-duration:24s;animation-delay:-40s;opacity:0.22'>&#8383;</span><span style='left:72%;animation-name:btcFlyDown;animation-duration:25s;animation-delay:-44s;opacity:0.08'>&#8383;</span><span style='left:78%;animation-name:btcFlyOblique;animation-duration:26s;animation-delay:-48s;opacity:0.045'>&#8383;</span><span style='left:84%;animation-name:btcFlyDown;animation-duration:27s;animation-delay:-52s;opacity:0.075'>&#8383;</span><span style='left:90%;animation-name:btcFly;animation-duration:21s;animation-delay:-56s;opacity:0.11'>&#8383;</span><span style='left:96%;animation-name:btcFlyDown;animation-duration:22s;animation-delay:-60s;opacity:0.16'>&#8383;</span><span style="left:4%;animation-name:btcFlyOblique;animation-duration:19s;animation-delay:0s;color:#f7931a;opacity:0.32">&#8383;</span><span style="left:12%;animation-name:btcFlyDown;animation-duration:20s;animation-delay:-4s;color:#080b10;opacity:0.42">&#8383;</span><span style="left:20%;animation-name:btcFly;animation-duration:21s;animation-delay:-8s;color:#252d38;opacity:0.5">&#8383;</span><span style="left:28%;animation-name:btcFlyDown;animation-duration:22s;animation-delay:-12s;color:#f7931a;opacity:0.32">&#8383;</span><span style="left:36%;animation-name:btcFlyOblique;animation-duration:23s;animation-delay:-16s;color:#080b10;opacity:0.42">&#8383;</span><span style="left:44%;animation-name:btcFlyDown;animation-duration:24s;animation-delay:-20s;color:#252d38;opacity:0.5">&#8383;</span><span style="left:52%;animation-name:btcFly;animation-duration:19s;animation-delay:-24s;color:#f7931a;opacity:0.32">&#8383;</span><span style="left:60%;animation-name:btcFlyDown;animation-duration:20s;animation-delay:-28s;color:#080b10;opacity:0.42">&#8383;</span><span style="left:68%;animation-name:btcFlyOblique;animation-duration:21s;animation-delay:-32s;color:#252d38;opacity:0.5">&#8383;</span><span style="left:76%;animation-name:btcFlyDown;animation-duration:22s;animation-delay:-36s;color:#f7931a;opacity:0.32">&#8383;</span><span style="left:84%;animation-name:btcFly;animation-duration:23s;animation-delay:-40s;color:#080b10;opacity:0.42">&#8383;</span><span style="left:92%;animation-name:btcFlyDown;animation-duration:24s;animation-delay:-44s;color:#252d38;opacity:0.5">&#8383;</span></div><header class=topbar><div class=barinner><span class=brand>EasyMiner</span><span class=live>LIVE</span><nav class=topnav><a href="/">Home</a><a href="/config">Configuration</a><a href="/about">About</a></nav></div></header><main><section class=panel><h1>&#8505; About EasyMiner</h1><p>EasyMiner is a headless Bitcoin solo-mining firmware for ESP32 and ESP32-S3 boards. It connects to a Stratum pool, downloads work templates and searches for a valid Bitcoin block using the board SHA-256 hardware and optimized mining tasks.</p><p class=muted>The project is based on ideas and implementation patterns from SparkMiner and NerdMiner V2, adapted for a display-free web interface.</p></section><section class=panel><h2>&#9881; Features</h2><ul><li>Wi-Fi configuration and persistent settings stored in NVS.</li><li>Mining on Core 0, Core 1, both cores, or disabled per core.</li><li>Live dashboard with WebSocket updates, hashrate, pool difficulty, shares, templates, blocks, temperature and memory charts.</li><li>Configuration, pool presets, reboot and factory-reset controls from the web interface.</li></ul></section><section class=panel><h2>&#129309; Contributions</h2><p>Contributions are welcome: report reproducible issues, improve documentation, test on additional ESP32 boards, optimize SHA-256 performance, or submit focused pull requests.</p><p class=muted>Please keep changes small and documented, avoid committing credentials, and include the target board and build output when reporting firmware problems.</p></section><section class=panel><h2>&#128220; License</h2><p>EasyMiner is free software distributed under the GNU General Public License version 3 (GPL-3.0).</p><p>You may use, study, modify and redistribute the software under the terms of the license included with this project.</p></section></main><footer class=bottombar><div class=barinner><span>Repository: <a href='https://github.com/valerio-vaccaro/EasyMiner'>EasyMiner</a></span><span>&bull;</span><span>License: GPL-3.0</span><span>Version: %VERSION%</span></div></footer></body></html>)ABOUT"); p.replace("%VERSION%", AUTO_VERSION); return p;
+String backgroundMarkup() {
+    String background;
+    for (int i = 0; i < 6; ++i) {
+        background += brand.hasLogo
+            ? "<img src=\"/logo.png?v=" AUTO_VERSION "\" alt=\"\" width=\"160\" height=\"160\">"
+            : "<span>₿</span>";
+    }
+    return background;
 }
-static void rebootSoon() { server.send(200,"text/html; charset=utf-8","<meta charset=utf-8>Done. Rebooting..."); delay(250); ESP.restart(); }
-static void onSocket(uint8_t n, WStype_t t, uint8_t *, size_t){if(t==WStype_CONNECTED){String payload=statsJson();socket.sendTXT(n,payload);}}
-void web_dashboard_init(){if(STATS_LED_PIN>=0){pinMode(STATS_LED_PIN,OUTPUT);digitalWrite(STATS_LED_PIN,LOW);}server.on("/",HTTP_GET,[]{server.send(200,"text/html; charset=utf-8",pageWithVersion());});server.on("/api/stats",HTTP_GET,[]{server.send(200,"application/json; charset=utf-8",statsJson());});server.on("/config",HTTP_GET,[]{server.send(200,"text/html; charset=utf-8",configPage());});server.on("/about",HTTP_GET,[]{server.send(200,"text/html; charset=utf-8",aboutPage());});server.on("/config",HTTP_POST,[]{miner_config_t *c=nvs_config_get();put(c->ssid,sizeof(c->ssid),field("ssid"));put(c->wifiPassword,sizeof(c->wifiPassword),field("wifi_password"));put(c->wallet,sizeof(c->wallet),field("wallet"));put(c->workerName,sizeof(c->workerName),field("worker"));put(c->poolUrl,sizeof(c->poolUrl),field("pool_url"));c->poolPort=(uint16_t)field("pool_port").toInt();put(c->poolPassword,sizeof(c->poolPassword),field("pool_pass"));c->mineOnCore0=server.hasArg("core0");c->mineOnCore1=server.hasArg("core1");nvs_config_save(c);server.send(200,"text/html; charset=utf-8","<meta charset=utf-8><meta http-equiv=refresh content=5><p>Saved. Rebooting...</p><script>setTimeout(function(){location.reload();},5000);</script>");delay(5000);ESP.restart();});server.on("/config/delete",HTTP_POST,[]{Preferences p;p.begin("easyminer",false);p.clear();p.end();WiFi.disconnect(true,true);rebootSoon();});server.on("/reboot",HTTP_POST,[]{rebootSoon();});server.begin();socket.begin();socket.onEvent(onSocket);Serial.println("[WEB] Dashboard: http://<device-ip>/ (configure at /config)");}
-void web_dashboard_task(void*){for(;;){server.handleClient();socket.loop();if(STATS_LED_PIN>=0&&statsLedOffAt&&millis()>=statsLedOffAt){digitalWrite(STATS_LED_PIN,LOW);statsLedOffAt=0;}static uint32_t last=0;if(millis()-last>=10000){String payload=statsJson();socket.broadcastTXT(payload);if(STATS_LED_PIN>=0){digitalWrite(STATS_LED_PIN,HIGH);statsLedOffAt=millis()+120;}last=millis();}vTaskDelay(pdMS_TO_TICKS(20));}}
+
+String renderPage(const char *title, const String &content, const char *activePage) {
+    const String logo = brand.hasLogo
+        ? "<img class=\"brand-logo\" src=\"/logo.png?v=" AUTO_VERSION "\" alt=\"\">"
+        : "";
+    const TemplateValue values[] = {
+        {"TITLE", title}, {"BRAND", brand.name}, {"BRAND_ID", brand.id},
+        {"THEME", brand.theme}, {"LOGO", logo}, {"BACKGROUND", backgroundMarkup()},
+        {"CONTENT", content}, {"VERSION", AUTO_VERSION},
+        {"PAGE_SCRIPT", strcmp(activePage, "about") == 0 || !*activePage ? "" : "<script>%SCRIPT%</script>"},
+        {"FAVICON", brand.hasLogo ? "/logo.png?v=" AUTO_VERSION : "/favicon.svg?v=" AUTO_VERSION},
+        {"HOME_CURRENT", strcmp(activePage, "home") == 0 ? "aria-current=\"page\"" : ""},
+        {"CONFIG_CURRENT", strcmp(activePage, "config") == 0 ? "aria-current=\"page\"" : ""},
+        {"ABOUT_CURRENT", strcmp(activePage, "about") == 0 ? "aria-current=\"page\"" : ""},
+    };
+    return fillTemplate(WEB_LAYOUT, values);
+}
+
+String homePage() {
+    const TemplateValue values[] = {{"VERSION", AUTO_VERSION}};
+    return renderPage(brand.name, fillTemplate(WEB_HOME, values), "home");
+}
+
+String configPage() {
+    const miner_config_t *config = nvs_config_get();
+    const TemplateValue values[] = {
+        {"BRAND", brand.name}, {"VERSION", AUTO_VERSION},
+        {"SSID", escapeHtml(config->ssid)},
+        {"WIFI_PASSWORD", escapeHtml(config->wifiPassword)},
+        {"WALLET", escapeHtml(config->wallet)},
+        {"WORKER", escapeHtml(config->workerName)},
+        {"POOL_HOST", escapeHtml(config->poolUrl)},
+        {"POOL_PORT", String(config->poolPort)},
+        {"POOL_PASSWORD", escapeHtml(config->poolPassword)},
+        {"CORE0", config->mineOnCore0 ? "checked" : ""},
+        {"CORE1", config->mineOnCore1 ? "checked" : ""},
+    };
+    const String title = String(brand.name) + " configuration";
+    return renderPage(title.c_str(), fillTemplate(WEB_CONFIG, values), "config");
+}
+
+String aboutPage() {
+    const TemplateValue values[] = {{"BRAND", brand.name}};
+    const String title = String("About ") + brand.name;
+    return renderPage(title.c_str(), fillTemplate(WEB_ABOUT, values), "about");
+}
+
+String statsJson() {
+    const mining_stats_t *stats = miner_get_stats();
+    const unsigned long elapsed = max(1UL, millis() - stats->startTime);
+    StaticJsonDocument<1536> document;
+    JsonObject data = document["stats"].to<JsonObject>();
+
+    data["uptimeSeconds"] = elapsed / 1000;
+    data["hashrate"] = uint32_t(double(stats->hashes) * 1000.0 / elapsed);
+    data["chipTemperature"] = temperatureRead();
+    data["freeHeap"] = ESP.getFreeHeap();
+    data["minFreeHeap"] = ESP.getMinFreeHeap();
+    data["heapSize"] = ESP.getHeapSize();
+    data["cpuMHz"] = ESP.getCpuFreqMHz();
+    data["hashes"] = uint64_t(stats->hashes);
+    data["shares"] = stats->shares;
+    data["accepted"] = stats->accepted;
+    data["rejected"] = stats->rejected;
+    data["blocks"] = stats->blocks;
+    data["templates"] = stats->templates;
+    data["bestDifficulty"] = stats->bestDifficulty;
+    data["latency"] = stats->avgLatency;
+    data["poolConnected"] = stratum_is_connected();
+    data["poolDifficulty"] = miner_get_difficulty();
+    data["pool"] = stratum_get_pool();
+    data["poolName"] = stratum_get_pool();
+    data["mining"] = miner_is_running();
+    data["core0Active"] = miner_core0_is_active();
+    data["core1Active"] = miner_core1_is_active();
+    data["ip"] = wifi_manager_get_ip();
+    data["rssi"] = WiFi.RSSI();
+    data["wallet"] = nvs_config_get()->wallet;
+    data["flashSize"] = ESP.getFlashChipSize();
+
+    String output;
+    serializeJson(document, output);
+    return output;
+}
+
+void sendPage(const String &page, const char *script = nullptr, size_t scriptLength = 0) {
+    // Configuration responses contain saved settings; never cache them.
+    server.sendHeader("Cache-Control", "no-store");
+    // Only expand the stylesheet in the head and the final script marker.
+    // Marker-like text in saved input values remains literal.
+    const size_t styleStart = page.indexOf("%STYLE%");
+    const size_t styleEnd = styleStart + strlen("%STYLE%");
+    const size_t scriptStart = script ? page.lastIndexOf("%SCRIPT%") : page.length();
+    const size_t scriptEnd = script ? scriptStart + strlen("%SCRIPT%") : page.length();
+    const size_t length = page.length() - (styleEnd - styleStart) - (scriptEnd - scriptStart)
+        + sizeof(WEB_STYLE) - 1 + scriptLength;
+
+    server.setContentLength(length);
+    server.send(200, "text/html; charset=utf-8", "");
+    server.sendContent(page.c_str(), styleStart);
+    server.sendContent_P(WEB_STYLE, sizeof(WEB_STYLE) - 1);
+    server.sendContent(page.c_str() + styleEnd, scriptStart - styleEnd);
+    if (script) {
+        server.sendContent_P(script, scriptLength);
+        server.sendContent(page.c_str() + scriptEnd, page.length() - scriptEnd);
+    }
+}
+
+void sendAsset(const char *type, const char *data, size_t length) {
+    // Asset URLs include the firmware version. Revalidate unversioned URLs
+    // when switching brands on the same device.
+    server.sendHeader("Cache-Control", "no-cache");
+    server.send_P(200, type, data, length);
+}
+
+void registerAssets() {
+    server.on("/favicon.svg", HTTP_GET, [] {
+        sendAsset("image/svg+xml; charset=utf-8", WEB_FAVICON, sizeof(WEB_FAVICON) - 1);
+    });
+    server.on("/favicon.ico", HTTP_GET, [] {
+        server.sendHeader("Location", "/favicon.svg");
+        server.send(302, "text/plain", "");
+    });
+#if defined(BLOX_VARIANT) || defined(OFFICINE_BITCOIN_VARIANT) || defined(SATOSHI_SPRITZ_VARIANT) || defined(SBAMMINER_VARIANT)
+    server.on("/logo.png", HTTP_GET, [] {
+        sendAsset("image/png", reinterpret_cast<const char *>(WEB_LOGO), sizeof(WEB_LOGO));
+    });
+#endif
+}
+
+void copyField(char *destination, size_t size, const char *name) {
+    const String value = server.hasArg(name) ? server.arg(name) : String();
+    strncpy(destination, value.c_str(), size - 1);
+    destination[size - 1] = '\0';
+}
+
+void scheduleReboot(const char *message) {
+    const String content = String("<section class=\"panel\"><h1>") + message
+        + "</h1><p>Reconnecting to the miner shortly...</p></section>"
+          "<script>setTimeout(() => location.replace('/'), 5000);</script>";
+    sendPage(renderPage(brand.name, content, ""));
+    delay(250);
+    ESP.restart();
+}
+
+void saveConfig() {
+    const long port = server.arg("pool_port").toInt();
+    if (port < 1 || port > 65535) {
+        server.send(400, "text/plain; charset=utf-8", "Pool port must be between 1 and 65535.");
+        return;
+    }
+    miner_config_t *config = nvs_config_get();
+    copyField(config->ssid, sizeof(config->ssid), "ssid");
+    copyField(config->wifiPassword, sizeof(config->wifiPassword), "wifi_password");
+    copyField(config->wallet, sizeof(config->wallet), "wallet");
+    copyField(config->workerName, sizeof(config->workerName), "worker");
+    copyField(config->poolUrl, sizeof(config->poolUrl), "pool_url");
+    copyField(config->poolPassword, sizeof(config->poolPassword), "pool_pass");
+    config->poolPort = uint16_t(port);
+    config->mineOnCore0 = server.hasArg("core0");
+    config->mineOnCore1 = server.hasArg("core1");
+    nvs_config_save(config);
+    scheduleReboot("Saved. Rebooting...");
+}
+
+void deleteConfig() {
+    Preferences preferences;
+    preferences.begin("easyminer", false);
+    preferences.clear();
+    preferences.end();
+    WiFi.disconnect(true, true);
+    scheduleReboot("Configuration deleted. Rebooting...");
+}
+
+void onSocket(uint8_t client, WStype_t type, uint8_t *, size_t) {
+    if (type == WStype_CONNECTED) {
+        String payload = statsJson();
+        socket.sendTXT(client, payload);
+    }
+}
+
+void flashStatsLed() {
+    if (STATS_LED_PIN < 0) return;
+    digitalWrite(STATS_LED_PIN, HIGH);
+    statsLedOffAt = millis() + 120;
+}
+
+void updateStatsLed() {
+    if (STATS_LED_PIN >= 0 && statsLedOffAt && int32_t(millis() - statsLedOffAt) >= 0) {
+        digitalWrite(STATS_LED_PIN, LOW);
+        statsLedOffAt = 0;
+    }
+}
+
+} // namespace
+
+void web_dashboard_init() {
+    if (STATS_LED_PIN >= 0) {
+        pinMode(STATS_LED_PIN, OUTPUT);
+        digitalWrite(STATS_LED_PIN, LOW);
+    }
+    registerAssets();
+    server.on("/", HTTP_GET, [] { sendPage(homePage(), WEB_DASHBOARD_JS, sizeof(WEB_DASHBOARD_JS) - 1); });
+    server.on("/config", HTTP_GET, [] { sendPage(configPage(), WEB_CONFIG_JS, sizeof(WEB_CONFIG_JS) - 1); });
+    server.on("/about", HTTP_GET, [] { sendPage(aboutPage()); });
+    server.on("/api/stats", HTTP_GET, [] {
+        server.sendHeader("Cache-Control", "no-store");
+        server.send(200, "application/json; charset=utf-8", statsJson());
+    });
+    server.on("/config", HTTP_POST, saveConfig);
+    server.on("/config/delete", HTTP_POST, deleteConfig);
+    server.on("/reboot", HTTP_POST, [] { scheduleReboot("Rebooting..."); });
+    server.begin();
+    socket.begin();
+    socket.onEvent(onSocket);
+    Serial.println("[WEB] Dashboard: http://<device-ip>/ (configure at /config)");
+}
+
+void web_dashboard_task(void *) {
+    uint32_t lastBroadcast = 0;
+    for (;;) {
+        server.handleClient();
+        socket.loop();
+        updateStatsLed();
+        if (millis() - lastBroadcast >= STATS_INTERVAL_MS) {
+            String payload = statsJson();
+            socket.broadcastTXT(payload);
+            flashStatsLed();
+            lastBroadcast = millis();
+        }
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+}

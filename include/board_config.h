@@ -17,6 +17,8 @@
     #define MINER_NAME "OfficineBitcoinMiner"
 #elif defined(BLOX_VARIANT)
     #define MINER_NAME "BLOXMiner"
+#elif defined(SBAMMINER_VARIANT)
+    #define MINER_NAME "SBAMminer"
 #else
     #define MINER_NAME "EasyMiner"
 #endif
@@ -205,6 +207,8 @@
     #define AP_SSID_PREFIX  "OfficineBitcoinMiner_"
 #elif defined(BLOX_VARIANT)
     #define AP_SSID_PREFIX  "BLOXMiner_"
+#elif defined(SBAMMINER_VARIANT)
+    #define AP_SSID_PREFIX  "SBAMminer_"
 #else
     #define AP_SSID_PREFIX  "EasyMiner_"
 #endif

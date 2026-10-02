@@ -1,0 +1,38 @@
+<div class="statusbox" role="status">
+  <span class="icon" aria-hidden="true">🟢</span>
+  <span class="label">Status <span class="value" id="status">Connecting...</span></span>
+</div>
+<section class="grid" aria-label="Mining statistics">
+  <div class="card"><span class="icon" aria-hidden="true">⚡</span><span class="label">Hashrate</span><div class="value" id="hash">0 H/s</div></div>
+  <div class="card"><span class="icon" aria-hidden="true">🎯</span><span class="label">Pool difficulty</span><div class="value" id="poolDifficulty">waiting</div></div>
+  <div class="card"><span class="icon" aria-hidden="true">📄</span><span class="label">Templates</span><div class="value" id="templates">0</div></div>
+  <div class="card"><span class="icon" aria-hidden="true">📈</span><span class="label">Shares</span><div class="value" id="shares">0 / 0</div></div>
+  <div class="card"><span class="icon" aria-hidden="true">🎉</span><span class="label">Blocks</span><div class="value" id="blocks">0</div></div>
+  <div class="card wide"><span class="icon" aria-hidden="true">🌐</span><span class="label">Pool URL</span><div class="value" id="pool">offline</div></div>
+  <div class="card wide"><span class="icon" aria-hidden="true">🔑</span><span class="label">Mining address</span><div class="value" id="wallet">not configured</div></div>
+  <div class="card"><span class="icon" aria-hidden="true">🌡️</span><span class="label">Chip temperature</span><div class="value" id="temperature">waiting</div></div>
+  <div class="card"><span class="icon" aria-hidden="true">⏱️</span><span class="label">Uptime</span><div class="value" id="uptime">waiting</div></div>
+  <div class="card"><span class="icon" aria-hidden="true">💾</span><span class="label">Free memory</span><div class="value" id="freeHeap">waiting</div></div>
+  <div class="card"><span class="icon" aria-hidden="true">📉</span><span class="label">Minimum memory</span><div class="value" id="minFreeHeap">waiting</div></div>
+  <div class="card"><span class="icon" aria-hidden="true">⚙️</span><span class="label">CPU frequency</span><div class="value" id="cpuMHz">waiting</div></div>
+</section>
+<section class="chartbox">
+  <h2>Hashrate over time</h2>
+  <p class="hint">Hashes per second, sampled every 10 seconds.</p>
+  <canvas id="hashchart" width="900" height="200" role="img" aria-label="Hashrate history"></canvas>
+</section>
+<section class="chartbox">
+  <h2>Accepted shares over time</h2>
+  <p class="hint">The line rises when the pool accepts a share. Rejections appear in the Shares card.</p>
+  <canvas id="sharechart" width="900" height="200" role="img" aria-label="Accepted shares history"></canvas>
+</section>
+<section class="chartbox">
+  <h2>Chip temperature over time</h2>
+  <p class="hint">Temperature in degrees Celsius, sampled every 10 seconds.</p>
+  <canvas id="tempchart" width="900" height="200" role="img" aria-label="Temperature history"></canvas>
+</section>
+<section class="chartbox">
+  <h2>Free memory over time</h2>
+  <p class="hint">Available heap in kilobytes, sampled every 10 seconds.</p>
+  <canvas id="memchart" width="900" height="200" role="img" aria-label="Free memory history"></canvas>
+</section>

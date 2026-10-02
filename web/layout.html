@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>%TITLE%</title>
+  <link rel="icon" href="%FAVICON%">
+  <style>%STYLE%</style>
+  <style>:root{%THEME%}</style>
+</head>
+<body data-brand="%BRAND_ID%">
+  <div class="background" aria-hidden="true">%BACKGROUND%</div>
+  <header class="topbar">
+    <div class="barinner">
+      <a class="brand" href="/">%LOGO%<span>%BRAND%</span></a>
+      <span class="live">LIVE</span>
+      <nav class="topnav" aria-label="Main navigation">
+        <a href="/" %HOME_CURRENT%>Home</a>
+        <a href="/config" %CONFIG_CURRENT%>Configuration</a>
+        <a href="/about" %ABOUT_CURRENT%>About</a>
+      </nav>
+    </div>
+  </header>
+  <main>%CONTENT%</main>
+  <footer class="bottombar">
+    <div class="barinner">
+      <span>Repository: <a href="https://github.com/valerio-vaccaro/EasyMiner">EasyMiner</a></span>
+      <span>License: GPL-3.0</span>
+      <span>Version: %VERSION%</span>
+    </div>
+  </footer>
+  %PAGE_SCRIPT%
+</body>
+</html>

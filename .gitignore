@@ -57,7 +57,4 @@ dkms.conf
 .venv/
 firmware/
 __pycache__/
-include/generated_blox_logo.h
-include/generated_officinebitcoin_logo.h
-include/generated_satoshispritz_logo.h
 .DS_Store

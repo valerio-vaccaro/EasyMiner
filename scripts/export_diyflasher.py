@@ -41,6 +41,10 @@ ENVIRONMENTS = (
     "esp32s3-headless-satoshispritz",
     "esp32-headless-led-satoshispritz",
     "esp32s3-mini-headless-satoshispritz",
+    "esp32-headless-sbamminer",
+    "esp32s3-headless-sbamminer",
+    "esp32-headless-led-sbamminer",
+    "esp32s3-mini-headless-sbamminer",
 )
 
 

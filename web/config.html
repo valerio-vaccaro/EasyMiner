@@ -1,0 +1,34 @@
+<section class="panel config-panel">
+  <h1>⚙️ %BRAND% Configuration</h1>
+  <p class="hint">Configure Wi-Fi and mining connection.</p>
+  <form id="configForm" method="post" action="/config">
+    <div class="fields">
+      <label class="field">📶 Wi-Fi SSID<input name="ssid" value="%SSID%" maxlength="32" autocomplete="off"></label>
+      <label class="field">🔒 Wi-Fi password<input name="wifi_password" type="password" value="%WIFI_PASSWORD%" maxlength="63" autocomplete="new-password"></label>
+      <label class="field">🔑 Mining address<input name="wallet" value="%WALLET%" autocomplete="off"></label>
+      <label class="field">👤 Worker<input name="worker" value="%WORKER%" maxlength="31" autocomplete="off"></label>
+      <label class="field">🌐 Pool host<input name="pool_url" value="%POOL_HOST%" autocomplete="off"></label>
+      <label class="field">🔢 Pool port<input name="pool_port" type="number" min="1" max="65535" value="%POOL_PORT%" required></label>
+      <fieldset class="core-options">
+        <legend>Mining cores</legend>
+        <label><input type="checkbox" name="core0" %CORE0%> Core 0</label>
+        <label><input type="checkbox" name="core1" %CORE1%> Core 1</label>
+      </fieldset>
+      <label class="field">📜 Pool password<input name="pool_pass" type="password" value="%POOL_PASSWORD%" autocomplete="new-password"></label>
+    </div>
+    <hr>
+    <div class="poolpresets" aria-label="Pool presets">
+      <span class="hint">Pool selection:</span>
+      <button type="button" data-pool="solo.homeminingitalia.org" data-port="3340">🎯 HomeMiningItalia</button>
+      <button type="button" data-pool="public-pool.io" data-port="21496">🌐 Public Pool</button>
+      <button type="button" data-pool="pool.bitronics.store" data-port="3334">⚡ Bitronics</button>
+      <button type="button" data-pool="solo.ckpool.org" data-port="3333">⛏️ CKPool</button>
+      <button type="button" data-pool="solo.stratum.braiins.com" data-port="3333">🔑 Braiins Solo</button>
+    </div>
+  </form>
+  <div class="actions">
+    <button form="configForm" type="submit">💾 Save and reboot</button>
+    <form method="post" action="/config/delete"><button class="danger" type="submit">🗑️ Delete configuration</button></form>
+    <form method="post" action="/reboot"><button type="submit">🔄 Reboot</button></form>
+  </div>
+</section>

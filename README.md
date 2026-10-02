@@ -21,18 +21,18 @@
 
 ## 🧩 Supported CI build targets
 
-The project supports four hardware profiles and four branding families: the standard EasyMiner firmware, BLOXMiner, OfficineBitcoinMiner, and SatoshiSpritzMiner. This produces sixteen CI build targets.
+The project supports four hardware profiles and five branding families: EasyMiner, BLOXMiner, OfficineBitcoinMiner, SatoshiSpritzMiner, and SBAMminer. This produces twenty CI build targets.
 
 Each brand is available on every hardware profile:
 
-| Hardware profile | Standard | BLOXMiner | OfficineBitcoinMiner | SatoshiSpritzMiner |
-| --- | --- | --- | --- | --- |
-| Classic ESP32, onboard LED | `esp32-headless` | `esp32-headless-blox` | `esp32-headless-officinebitcoin` | `esp32-headless-satoshispritz` |
-| ESP32-S3 DevKit, onboard LED | `esp32s3-headless` | `esp32s3-headless-blox` | `esp32s3-headless-officinebitcoin` | `esp32s3-headless-satoshispritz` |
-| Classic ESP32, external RGB LED | `esp32-headless-led` | `esp32-headless-led-blox` | `esp32-headless-led-officinebitcoin` | `esp32-headless-led-satoshispritz` |
-| ESP32-S3 Mini, external RGB LED | `esp32s3-mini-headless` | `esp32s3-mini-headless-blox` | `esp32s3-mini-headless-officinebitcoin` | `esp32s3-mini-headless-satoshispritz` |
+| Hardware profile | Standard | BLOXMiner | OfficineBitcoinMiner | SatoshiSpritzMiner | SBAMminer |
+| --- | --- | --- | --- | --- | --- |
+| Classic ESP32, onboard LED | `esp32-headless` | `esp32-headless-blox` | `esp32-headless-officinebitcoin` | `esp32-headless-satoshispritz` | `esp32-headless-sbamminer` |
+| ESP32-S3 DevKit, onboard LED | `esp32s3-headless` | `esp32s3-headless-blox` | `esp32s3-headless-officinebitcoin` | `esp32s3-headless-satoshispritz` | `esp32s3-headless-sbamminer` |
+| Classic ESP32, external RGB LED | `esp32-headless-led` | `esp32-headless-led-blox` | `esp32-headless-led-officinebitcoin` | `esp32-headless-led-satoshispritz` | `esp32-headless-led-sbamminer` |
+| ESP32-S3 Mini, external RGB LED | `esp32s3-mini-headless` | `esp32s3-mini-headless-blox` | `esp32s3-mini-headless-officinebitcoin` | `esp32s3-mini-headless-satoshispritz` | `esp32s3-mini-headless-sbamminer` |
 
-Brand defaults are `EasyMiner`, `BLOXMiner`, `OfficineBitcoinMiner`, and `SatoshiSpritzMiner`; the repository attribution remains the common EasyMiner project.
+Brand defaults are `EasyMiner`, `BLOXMiner`, `OfficineBitcoinMiner`, `SatoshiSpritzMiner`, and `SBAMminer`; the repository attribution remains the common EasyMiner project.
 
 | Brand family | Default worker | Provisioning SSID prefix | Firmware logo |
 | --- | --- | --- | --- |
@@ -40,6 +40,7 @@ Brand defaults are `EasyMiner`, `BLOXMiner`, `OfficineBitcoinMiner`, and `Satosh
 | BLOXMiner | `BLOXMiner` | `BLOXMiner_` | [BLOX.space](https://blox.space/) |
 | OfficineBitcoinMiner | `OfficineBitcoinMiner` | `OfficineBitcoinMiner_` | [OfficineBitcoin](https://officinebitcoin.it/) |
 | SatoshiSpritzMiner | `SatoshiSpritzMiner` | `SatoshiSpritzMiner_` | [Satoshi Spritz](https://satoshispritz.it/) |
+| SBAMminer | `SBAMminer` | `SBAMminer_` | SBAMminer |
 
 All variants are maintained in this repository: [github.com/valerio-vaccaro/EasyMiner](https://github.com/valerio-vaccaro/EasyMiner).
 
@@ -76,7 +77,7 @@ pio run -e esp32-headless-satoshispritz -t upload
 
 If more than one board is connected, add `--upload-port /dev/ttyUSB0` (or the appropriate serial port).
 
-On first boot, connect to the access point for the selected brand: `EasyMiner_XXXX`, `BLOXMiner_XXXX`, `OfficineBitcoinMiner_XXXX`, or `SatoshiSpritzMiner_XXXX`. Use the captive portal to set Wi-Fi, wallet, worker, and pool settings. Once connected, open `http://easyminer.local/` from a device on the same network. If mDNS is unavailable, use the device IP shown in the serial log or router DHCP list. The dashboard uses HTTP port `80` and WebSocket port `81`.
+On first boot, connect to the access point for the selected brand: `EasyMiner_XXXX`, `BLOXMiner_XXXX`, `OfficineBitcoinMiner_XXXX`, `SatoshiSpritzMiner_XXXX`, or `SBAMminer_XXXX`. Use the captive portal to set Wi-Fi, wallet, worker, and pool settings. Once connected, open `http://easyminer.local/` from a device on the same network. If mDNS is unavailable, use the device IP shown in the serial log or router DHCP list. The dashboard uses HTTP port `80` and WebSocket port `81`.
 
 The default pool is `solo.homeminingitalia.org:3340` with password `x`. The default worker is the firmware brand name; custom worker names are preserved.
 
@@ -91,17 +92,38 @@ Every successful build produces files in the CI artifact named `firmware-<enviro
 
 Use the **Actions → Build firmware → Artifacts** page to download binaries for a commit or release.
 
-The same workflow includes a `firmware-export` artifact after all sixteen targets finish. It contains an `index.json` and one version-prefixed folder per board/variant, for example `v1.0.0_esp32-headless` and `v1.0.0_esp32-headless-blox`. Each folder contains address-prefixed component images and a factory image, with SHA-256 metadata in the index.
+The same workflow includes a `firmware-export` artifact after all twenty targets finish. It contains an `index.json` and one version-prefixed folder per board/variant, for example `v1.0.0_esp32-headless` and `v1.0.0_esp32-headless-blox`. Each folder contains address-prefixed component images and a factory image, with SHA-256 metadata in the index.
 
 ## 🛠️ Project layout
 
 ```text
 src/                  Firmware, miner, Stratum, configuration, and dashboard code
+web/                  Shared readable HTML, CSS, and JavaScript for every brand
 include/              Board profiles and shared compile-time configuration
 scripts/              Version injection and factory-image generation
 docs/                 Static GitHub Pages documentation site
 .github/workflows/    Firmware and Pages automation
 ```
+
+The web server and brand palettes live in `src/web_dashboard.cpp`. The build script `scripts/embed_web_assets.py` embeds `web/` and the selected logo into flash; no filesystem upload is required. Styles and scripts are streamed from flash inside the HTML response, while logos are served separately. This keeps page-generation memory small and avoids extra concurrent browser requests. WebSocket handshakes use software SHA-1 so mining can keep using the SHA-256 hardware.
+
+To check the currently installed SBAM firmware with headless Chrome (Node 22+):
+
+```bash
+node scripts/check_web_pages.mjs --brand sbamminer --url http://easyminer.local
+```
+
+For an attached classic ESP32, this command builds and flashes all five versions, checks each page at 1280, 390, and 320 pixels, and leaves SBAM installed:
+
+```bash
+node scripts/check_web_pages.mjs --flash-all --port /dev/ttyUSB0 --url http://easyminer.local --restore sbamminer
+```
+
+Use the board IP in `--url` if mDNS is slow. The script uses `venv/bin/pio`; use `--pio` to select another executable. Screenshots are written to `docs/screenshot/<brand>/`; machine-only reports, diagnostics, and upload logs stay in the ignored `.pio/web-checks/` directory. Checks cover navigation, branding, image loading, live statistics, charts, HTTP fallback, reduced motion, and pool presets. Save, delete, and reboot forms are inspected without submitting them.
+
+Browse the [firmware screenshots](docs/screenshots.html) for all five versions. Regenerate this image-only documentation page with `node scripts/screenshot_gallery.mjs`; no reports are needed. If a sweep is interrupted, add `--start satoshispritz` (or another brand) to resume from that version using the private earlier reports. Resume only when the firmware sources have not changed since those reports were generated.
+
+The handshake hash regression check runs with `venv/bin/python scripts/test_websocket_sha.py` and requires a host `g++` compiler.
 
 ## 🤝 Contributing
 
